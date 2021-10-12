@@ -1,0 +1,362 @@
+#!/usr/bin/env python3 
+
+"""
+Dual-Cam Live Cell Tracking Software
+Samuel Drouin 2021
+Version 0.0.0 | May 31, 2021
+"""
+
+import os, sys, argparse, configparser, itertools, operator, math
+from skimage import io
+import numpy as np 
+import pandas as pd
+
+pd.options.mode.chained_assignment = None # Ignore 182: SettingWithCopyWarning
+pd.options.display.max_rows = None
+
+
+def main():
+    # Prepare the run 
+    args = get_arguments()
+    conf = parse_config(args.config)
+
+    # Confirm that the input files are present
+    if not len(args.inputs) == len(conf["Input"]):
+        print("Expecting {} inputs. Got {}.".format(len(conf["Input"]), len(args.inputs)))
+    
+    # Process the input files to generate the tables
+    i = 0
+    tables = list()
+    for input_conf in conf["Input"]:
+        name = input_conf['Name']
+        
+        input_files = args.inputs[i]
+
+        if input_conf['Mask']:
+            # Select the input files based on the extension
+            track_file = img_file = None
+
+            if len(input_files) != 2:
+                sys.exit('Expecting a mask file and a TrackMate file but received {} files'.format(len(input_files)))
+
+            for file in input_files:
+                file_ext = os.path.splitext(file)[-1][1:]
+                if file_ext in conf["General"]["Mask"]:
+                    img_file = os.path.abspath(file)
+                elif file_ext in conf["General"]["TrackMate"]:
+                    track_file = os.path.abspath(file)
+
+            if img_file == None:
+                sys.exit("No image file or unexpected image format for input '{}'".format(name))
+            if track_file == None:
+                sys.exit("No TrackMate file for input '{}'".format(name))
+                
+            # Parse the data 
+            if input_conf['Static']:
+                table = mask_to_table(track_file=track_file, img_file=img_file, pixel_size=conf["General"]['PixelSize'], static=True)
+            else:
+                table = mask_to_table(track_file=track_file, img_file=img_file, pixel_size=conf["General"]['PixelSize'])
+
+            # Make sure the static image contains a single image 
+            # Otherwise discard all but the first frame 
+            if input_conf['Static']:
+                table = make_static(table, name)
+
+            table.rename({'TRACK_ID': name}, axis=1, inplace=True)
+        else:
+            if len(input_files) != 1:
+                sys.exit('Expecting a TrackMate file but received {} files'.format(len(input_files)))
+
+            track_file = input_files[0]
+            file_ext = os.path.splitext(track_file)[-1][1:]
+
+            if not file_ext in conf["General"]["TrackMate"]:
+                sys.exit("No TrackMate file for input '{}'".format(name))
+
+            # Parse the data 
+            table = centroid_to_table(track_file=track_file, radius=input_conf['Radius'], pixel_size=conf["General"]['PixelSize'])
+
+            if input_conf['Static']:
+                table = make_static(table, name)
+
+            table.rename({'TRACK_ID': name}, axis=1, inplace=True)
+
+        tables.append(table)
+
+        i += 1
+
+    # Count dict 
+    count = dict()
+
+    # Merge the tables 
+    df = tables[0]
+    name = list(df.columns.values)[2]
+    count[name] = len(df[name].unique())
+
+    i = 1
+    for table in tables[1:]:
+        name = list(table.columns.values)[2]
+        count[name] = len(table[name].unique())
+        if conf["Input"][i]["Static"]:
+            df = pd.merge(df, table, how="left", on=["X", "Y"], suffixes=("", "_y"))
+            df.drop("FRAME_y", inplace=True, axis=1)
+        else:
+            df = pd.merge(df, table, how="left", on=["X", "Y", "FRAME"])
+        i += 1
+
+    df.drop(["X", "Y"], axis=1, inplace=True)
+
+    cols = list(df.columns.values) 
+    order = [cols[1]] + [cols[0]] + cols[2:]   
+
+    df.drop_duplicates(inplace=True)
+
+    df.sort_values(by=cols, inplace=True)
+    df = pd.concat([df[df.fillna(method='ffill').duplicated(keep='last')], df[~df.fillna(method='ffill').duplicated(keep=False)]]) # ajouter les non-NaN
+    df.sort_values(by=cols, inplace=True)
+    df = df.reindex(columns=order)
+    
+    # Write the output 
+    with open(args.output, 'w') as f:
+        for name, c in count.items():
+            f.write('#'+name+' '+str(c)+'\n')
+        
+        df.to_csv(f, index=False)
+
+
+def make_static(table, name):
+    """Make a dataframe static by removing tracks with frame that are not 0"""
+
+    if not table[table['FRAME'] > 0].empty:
+        print("WARNING. Expected a static image but found multiple time frame for '{}'".format(name))
+    table = table[table['FRAME'] == 0]
+    return table
+
+
+def mask_to_table(track_file, img_file, pixel_size, static=False):
+    """Generate a hash from a mask"""
+
+    tracks = parse_trackmate(track_file)
+    mask = io.imread(img_file)
+
+    x = []
+    y = []
+    ids = []
+    times = []
+    centroids = dict()
+
+    neighbour_dist = [(-1, 0), (0, -1), (0, 0), (0, 1), (1, 0)] # Neighbour distances are +/- 1 excluding diagonals
+    for track in tracks.iterrows():
+        track_id = int(track[1]['TRACK_ID'])
+        track_time = int(track[1]['FRAME'])
+        track_x = int(round(track[1]['POSITION_X']/pixel_size))
+        track_y = int(round(track[1]['POSITION_Y']/pixel_size))
+
+        if not track_time in centroids:
+            centroids[track_time] = dict()
+        centroids[track_time][track_id] = (track_x, track_y)
+
+        visited = set()
+        
+        # Ignore centroids when the mask does not contain a particle at the centroid center
+        if static:
+            if mask[track_y][track_x] != 0:
+                visited.add((track_x, track_y))
+        else:
+            if mask[track_time][track_y][track_x] != 0: 
+                visited.add((track_x, track_y))
+
+        completed = set()
+
+        # Add each positive positions to the completed list
+        while visited: # Done when there are no new nodes to visit
+            v = visited.pop()
+            completed.add(v)
+            neighbour = [tuple(map(operator.add, v, x)) for x in neighbour_dist]
+            for n in neighbour:
+                if not n in completed:
+                    if static:
+                        if mask[int(n[1])][int(n[0])] != 0:
+                            visited.add(n)
+                    else:
+                        if mask[track_time][int(n[1])][int(n[0])] != 0:
+                            visited.add(n)
+        
+        # Add the results to the lists
+        x.extend([c[0] for c in completed])
+        y.extend([c[1] for c in completed])
+        ids.extend(itertools.repeat(track_id, len(completed)))
+        times.extend(itertools.repeat(track_time, len(completed)))
+    
+    df = pd.DataFrame(list(zip(x, y, ids, times)), columns=['X', 'Y', 'TRACK_ID', 'FRAME'])
+
+    # Filter overlapping particles
+    unique = df.drop_duplicates(subset = ['X', 'Y', 'FRAME'], keep = False)
+    duplicated = df[df.duplicated(subset = ['X', 'Y', 'FRAME'], keep = False)]
+
+    # Distance between the potential centroid and any position attributed to the particule with the centroid
+    if not duplicated.empty:
+        duplicated['DISTANCE'] = duplicated.apply(lambda x: math.sqrt((x['X']-centroids[x['FRAME']][x['TRACK_ID']][0])**2 + (x['Y']-centroids[x['FRAME']][x['TRACK_ID']][1])**2), axis=1)
+
+        selected = list()
+        for k, g in duplicated.groupby(by = ['X', 'Y', 'FRAME']):
+            selected.append(g.sort_values(by = ['DISTANCE']).iloc[0]) # Keep the track were the centroid is closer to the point 
+        
+        selected_df = pd.DataFrame(selected)
+        selected_df.drop(labels='DISTANCE', axis=1, inplace=True)
+        selected_df = selected_df.astype(int)
+        frames = [unique, selected_df]
+        df = pd.concat(frames)
+    else:  
+        df = unique
+
+    return df 
+
+
+def parse_trackmate(track_file):
+    """Parse a trackmate file"""
+
+    tracks = pd.read_csv(track_file, sep=',', header = 0, usecols=['TRACK_ID', 'POSITION_X', 'POSITION_Y', 'FRAME'])
+    return tracks
+
+
+def centroid_to_table(track_file, radius, pixel_size):
+    """Generate a hash from a list of centroids"""
+    tracks = parse_trackmate(track_file)
+
+    x = []
+    y = []
+    ids = []
+    times = []
+
+    radius_px = int(round(radius/pixel_size))
+
+    particle_sphere = list(itertools.product(range(-radius_px, radius_px+1), range(-radius_px, radius_px+1)))
+    
+    for track in tracks.iterrows():
+        track_id = int(track[1]['TRACK_ID'])
+        track_time = int(track[1]['FRAME'])
+        track_x = int(round(track[1]['POSITION_X']/pixel_size))
+        track_y = int(round(track[1]['POSITION_Y']/pixel_size))
+
+        centroid = (track_x, track_y)
+
+        particle = [tuple(map(operator.add, centroid, x)) for x in particle_sphere]
+
+        # Add the results to the lists
+        x.extend([p[0] for p in particle])
+        y.extend([p[1] for p in particle])
+        ids.extend(itertools.repeat(track_id, len(particle)))
+        times.extend(itertools.repeat(track_time, len(particle)))
+    
+    df = pd.DataFrame(list(zip(x, y, ids, times)), columns=['X', 'Y', 'TRACK_ID', 'FRAME'])
+    return df 
+
+
+def parse_config(conf_f):
+    """Parse the configuration file"""
+    # Read the config file
+    try:
+        config = configparser.ConfigParser()
+        config.read(conf_f)
+    except configparser.ParsingError:
+        sys.exit('The config file cannot be parsed')
+    except configparser.DuplicateSectionError:
+        sys.exit('The config file contains a duplicate sections\nMake sure that every section is unique')
+    except configparser.DuplicateOptionError:
+        sys.exit('A section contains a duplicate option\nMake sure that options are unique in every sections')
+    except configparser.Error:
+        sys.exit('An unsupported error occured while parsing the config file\nMake sure that the config file is correctly formatted')
+
+    # Check that the config is not empty 
+    if len(config.sections()) == 0:
+        sys.exit('Empty or non exiting config file')
+
+    # Verify that the config is correct 
+    sections = config.sections()
+    input_sections = [int(s) for s in sections[1:]]
+    # The config file is expected to
+    #    Start with a "General" section
+    #    Followed by input sections numerically labelled, ordered and increasing in steps of one
+    if not sections[0] == 'General'\
+        or len(input_sections) < 2\
+        or sorted(input_sections) != input_sections\
+        or input_sections != list(range(1,len(input_sections)+1)):
+        sys.exit('Incorrectly formatted config file.\nCheck the documentation for more informations')
+
+    # Parse the config 
+    conf = dict()
+
+    # General section
+    conf["General"] = dict()
+    section_general = config["General"]
+    try:
+        conf["General"]["TrackMate"] = section_general["TrackMate"]
+        conf["General"]["Mask"] = section_general["Mask"]
+        conf["General"]["PixelSize"] = float(section_general["PixelSize"])
+    except KeyError as e:
+        sys.exit("Missing sub-section {} in section 'General'".format(e))
+    conf["Input"] = []
+
+    for input_section in input_sections:
+        section_number = str(input_section)
+        conf["Input"].append(dict())
+
+        try:
+            conf["Input"][input_section-1]["Name"] = config[section_number]["Name"]
+                
+            if config[section_number]["Static"].lower() == "yes":
+                conf["Input"][input_section-1]["Static"] = True 
+            elif config[section_number]["Static"].lower() == "no":
+                conf["Input"][input_section-1]["Static"] = False 
+            else:
+                sys.exit("Unexpected value '{}' for sub-section 'Static' in section '{}'".format(config[section_number]["Static"].lower(), input_section))
+            
+            if config[section_number]["Mask"].lower() == "yes":
+                conf["Input"][input_section-1]["Mask"] = True 
+            elif config[section_number]["Mask"].lower() == "no":
+                conf["Input"][input_section-1]["Mask"] = False 
+
+                try:
+                    conf["Input"][input_section-1]["Radius"] = float(config[section_number]["Radius"])
+                except ValueError:
+                    sys.exit("Unexpected radius value in section '{}'".format(input_section))
+            else:
+                sys.exit("Unexpected value for sub-section 'Mask' in section '{}'".format(input_section))
+            
+        except KeyError:
+            sys.exit("Missing sub-section {} in section '{}'".format(e, input_section))        
+
+    return conf
+
+
+def get_arguments():
+    """Parse the arguments"""
+    parser = argparse.ArgumentParser(description="Dual-Cam Live Cell Tracking")
+    parser.add_argument('-c', '--config', type=str, required=True, 
+                        help='Configuration file')
+    parser.add_argument('-o', '--output', type=str, default='DCTracking.csv', 
+                        help='Output File (CSV Format)')
+    parser.add_argument('inputs', nargs='+', type=str,
+                        help='Input files (as described in the config file)')
+    args = parser.parse_args()
+
+    args.config = os.path.abspath(os.path.realpath(args.config))
+    args.output = os.path.abspath(os.path.realpath(args.output))
+
+    # Check if the given output file is writable to avoid running the computation if 
+    # the output cannot be written
+    if not os.access(os.path.dirname(args.output), os.W_OK):
+        sys.exit('Output directory must be writable')
+    
+    # Parse the inputs
+    inputs = []
+    for input in args.inputs:
+        inputs.append(tuple(input.split(',')))
+    args.inputs = inputs
+
+    return args
+
+
+if __name__ == "__main__":
+    main()

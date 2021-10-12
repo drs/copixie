@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+
+import sys
+import pandas as pd  
+
+##################################################
+#             Parse the arguments                # 
+##################################################
+
+if not len(sys.argv) >= 5:
+    sys.exit("Usage: colocalizer <reference name> <query name> <DCTracker.csv> <out file> stable=5 transient=2")
+
+REFERENCE = sys.argv[1]
+QUERY = sys.argv[2]
+IN_FILE = sys.argv[3]
+OUT_FILE = sys.argv[4]
+
+STABLE = 5
+TRANSIENT = 2
+if len(sys.argv) > 4:
+    for arg in sys.argv[5:]:
+        label = arg.split('=')[0]
+        value = arg.split('=')[1]
+
+        if label.lower() == 'stable':
+            try:
+                STABLE = int(value)
+            except ValueError:
+                sys.exit("The stable interaction length must be an integer")
+
+        if label.lower() == 'transient':
+            try:
+                TRANSIENT = int(value)
+            except ValueError:
+                sys.exit("The minimal transient interaction length must be an integer")
+
+##################################################
+#           Analyze the interactions             #
+##################################################
+
+df = pd.read_csv(IN_FILE, sep=',', comment='#')
+
+cols = list(df.columns.values)
+
+try:
+    ref_col = cols.index(REFERENCE)
+except ValueError:
+    sys.exit('Reference {} does not exist.'.format(REFERENCE))
+
+try:
+    query_col = cols.index(QUERY)
+except ValueError:
+    sys.exit('Query {} does not exist.'.format(QUERY))
+
+interactions = []
+for k, g in df.groupby(by = [cols[ref_col], cols[query_col]]):
+    count = len(g)
+        
+    static = False
+    if count < TRANSIENT: # Ignore interactions shorther than the transient threshold
+        continue
+    elif count >= STABLE:
+        static = True
+
+    if static:
+        interaction_type = 'stable'
+    else:
+        interaction_type = 'transient'
+
+    start_frame = int(g.iloc[0]["FRAME"])
+    end_frame = int(g.iloc[-1]["FRAME"])
+    length = end_frame-start_frame
+    interactions.append([str(int(k[0])), str(int(k[1])), str(interaction_type), str(start_frame), str(end_frame), str(length)])
+
+with open(OUT_FILE, 'w') as out_handle:
+    # Write the comments first 
+    with open(IN_FILE) as in_handle:
+        for line in in_handle:
+            if line[0] == '#':
+                out_handle.write(line)
+                
+    out_handle.write(','.join([cols[ref_col], cols[query_col], 'Type', 'Start', 'End', 'Length'])+'\n')
+    for interaction in interactions:
+        out_handle.write(','.join(interaction)+'\n')
