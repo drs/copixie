@@ -64,6 +64,7 @@ function analyse(imageFile) {
     run("Subtract Background...", "rolling=10 stack");
     run("Duplicate...", "duplicate");
     run("Enhance Contrast", "auto");
+    run("Subtract...");
     run("Mexican Hat Filter", "radius=4 stack");
     run("8-bit");
     setAutoThreshold("Otsu");
@@ -76,9 +77,9 @@ function analyse(imageFile) {
     for (i = 0; i < n; i++) {
         roiManager('select', i);
         roiManager("save selected", outputDir + File.separator + i + ".roi");
-        run('TrackMate', "use_gui=True radius=0.265 threshold=250 " +
+        run('TrackMate', "use_gui=True radius=0.265 threshold=200 " +
         "median=True max_frame_gap=3 max_distance=0.2 " +
-        "max_gap_distance=0");
+        "max_gap_distance=0.2");
         waitForUser("Display Next TrackMate");
     }
 
