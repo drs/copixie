@@ -56,6 +56,14 @@ function analyse(imageFile) {
     run("Main Window [return]");
     waitForUser("Draw the nucleus\nClick ok to continue");
 
+    // Check that at least one ROI was drawn. Otherwise ask the user again to 
+    // draw the 
+    nRoi = roiManager("count");
+    while (nRoi < 1) {
+        waitForUser("Did you forget to draw/save a nucleus ? You have another chance !\nClick ok to continue");
+        nRoi = roiManager("count");
+    }
+
     // Deselect any ROI 
     roiManager("show all");
     roiManager("show none");
