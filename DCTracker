@@ -217,6 +217,19 @@ def parse_trackmate(track_file):
     """Parse a trackmate file"""
 
     tracks = pd.read_csv(track_file, sep=',', header = 0, usecols=['TRACK_ID', 'POSITION_X', 'POSITION_Y', 'FRAME'])
+    
+    # In version 7 TrackMate added three additional header rows
+    # To maintain compatibility with version 6, header rows are removed by removing rows 
+    # where the track id is not numeric
+    # Conversion to string before numeric check to avoid error with float/int types
+    tracks = tracks[tracks["TRACK_ID"].astype(str).str.isnumeric()]
+
+    # TrackMate header changed the columns type to str. 
+    # Changing numeric columns types back to int
+    tracks['POSITION_X'] = pd.to_numeric(tracks['POSITION_X'])
+    tracks['POSITION_Y'] = pd.to_numeric(tracks['POSITION_Y'])
+    tracks['FRAME'] = pd.to_numeric(tracks['FRAME'])
+
     return tracks
 
 
