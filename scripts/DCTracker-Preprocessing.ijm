@@ -75,8 +75,9 @@ function analyse(imageFile) {
     run("Subtract...");
     run("Mexican Hat Filter", "radius=4 stack");
     run("8-bit");
-    setAutoThreshold("Otsu");
-    run("Convert to Mask", "method=Otsu background=Light calculate");
+    setThreshold(1, 255);
+    setOption("BlackBackground", false);
+    run("Convert to Mask", "method=Otsu background=Light black");
     saveAs("Tiff", outputDir + File.separator + "mask.tif");
     close();
 
