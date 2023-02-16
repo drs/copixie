@@ -1,0 +1,56 @@
+#!/usr/bin/env python3 
+
+"""
+Copyright (C) 2023 Samuel Prince <samuel.prince-drouin@umontreal.ca>
+
+This file is a part of DCTracker.
+
+This file may be used under the terms of the GNU General Public License
+version 3 as published by the Free Software Foundation and appearing in
+the file LICENSE included in the packaging of this file.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+
+import os 
+import sys 
+
+import psutil
+
+# Add dctracker module directory to the path as suggested in https://stackoverflow.com/a/63743700
+# before imports. This must be changed when the package will be made available as a module, 
+# but will work better during the development
+parent_dir = os.path.split(os.path.dirname(os.path.realpath(__file__)))[0]
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
+
+from dctracker.main import CLIRunner, GUIRunner
+
+if __name__ == "__main__":
+    # DCTracker requires at lest Python >= 3.3 but was tested with Python 3.11 only 
+    if sys.version_info < (3,3,0):
+        raise RuntimeError("Non-supported Python version. A Python version >= 3.3 is required.")
+    
+    # On Windows, check the process parent name as suggested here https://stackoverflow.com/a/558804
+    # When started by double click, the parent process is "py.exe"
+    if sys.platform == 'win32':
+        p = psutil.Process(os.getpid())
+        if p.name() == 'py.exe':
+            GUIRunner()
+        else:
+            CLIRunner()
+    # On Linux, check for sys.stdin.isatty() as suggested here https://stackoverflow.com/a/35784108
+    # this might work for Darwin (macOS), but was not tested yet
+    elif sys.platform == 'linux':
+        if sys.stdin.isatty():
+            CLIRunner()
+        else:
+            GUIRunner()
+    else:
+        raise RuntimeError("Non-supported OS. Windows and Linux are currently supported.")
