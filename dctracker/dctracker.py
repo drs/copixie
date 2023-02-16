@@ -21,6 +21,10 @@ pd.options.mode.chained_assignment = None # Ignore 182: SettingWithCopyWarning
 pd.options.display.max_rows = None
 
 
+class InvalidCentroidError(RuntimeError):
+    """Raise if a centroid index is not present in the mask"""
+
+
 class DCTracker:
     """Run DCTracker from the command line"""
 
@@ -138,19 +142,17 @@ class DCTracker:
             
             # Ignore centroids when the mask does not contain a particle at the centroid center
             if static:
-                if mask[track_y][track_x] != 0:
-                    visited.add((track_x, track_y))
+                try:
+                    if mask[track_y][track_x] != 0:
+                        visited.add((track_x, track_y))
+                except IndexError:
+                    raise InvalidCentroidError()
             else:
                 try:
                     if mask[track_time][track_y][track_x] != 0: 
                         visited.add((track_x, track_y))
                 except IndexError:
-                    print(track)
-                    print(mask_file)
-                    print(track_time)
-                    print(track_y)
-                    print(track_x)
-                    raise 
+                    raise InvalidCentroidError()
 
             completed = set()
 

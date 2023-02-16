@@ -26,7 +26,8 @@ from platform import python_version
 
 import configobj
 
-from dctracker.dctracker import DCTracker
+from dctracker.dctracker import DCTracker 
+from dctracker.dctracker import InvalidCentroidError
 from dctracker.log import Logger
 from dctracker.config import *
 from dctracker.version import __version__
@@ -163,7 +164,7 @@ class Runner():
                             particles = self.parse_cell(root)
                             dctracker_args.append([cell] + particles)
                         except InvalidInputError as e:
-                            self.logger.warning("Input unit \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.context})
+                            self.logger.warning("Input folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.context})
 
         return dctracker_args
 
@@ -232,7 +233,10 @@ class Runner():
         Arguments:
             params: DCTracker module parameters
         """
-        DCTracker(params)
+        try:
+            DCTracker(params)
+        except InvalidCentroidError:
+            self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(params[0]['Label']), extra={'context': self.context})
 
 
 class CLIRunner(Runner):
