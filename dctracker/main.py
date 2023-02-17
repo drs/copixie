@@ -139,9 +139,6 @@ class Runner():
                 replicate_id = replicate[0]
                 replicate_path = replicate[1]
                 full_replicate_path = os.path.join(self.input_dir, replicate_path)
-
-                # Output path
-                full_output_path = os.path.join(self.output_dir, replicate_path)
                 
                 # Cells file structure are exclusively searched at the depth specified in Input/Depth relative 
                 # to the input path in the config (the real search depth is therefore the sum of the input 
@@ -155,6 +152,7 @@ class Runner():
                         # Generate the cell dictionary 
                         cell = dict()
                         label = '/'.join(path_to_list(root)[-int(self.config['Input']['Depth']):])
+                        full_output_path = os.path.join(self.output_dir, replicate_path, label)
                         cell['Condition'] = condition
                         cell['Replicate'] = replicate
                         cell['Label'] = label
