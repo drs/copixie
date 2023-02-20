@@ -65,44 +65,38 @@ class DCTracker:
 
             i += 1
 
-        # Count dict 
-        count = dict()
-
         # Merge the tables 
         df = tables[0]
         name = list(df.columns.values)[2]
-        count[name] = len(df[name].unique())
 
         i = 1
         for table in tables[1:]:
             name = list(table.columns.values)[2]
-            count[name] = len(table[name].unique())
             if self.particles[i]['Static']:
-                df = pd.merge(df, table, how="left", on=["X", "Y"], suffixes=("", "_y"))
+                df = pd.merge(df, table, how="outer", on=["X", "Y"], suffixes=("", "_y"))
                 df.drop("FRAME_y", inplace=True, axis=1)
             else:
-                df = pd.merge(df, table, how="left", on=["X", "Y", "FRAME"])
+                df = pd.merge(df, table, how="outer", on=["X", "Y", "FRAME"])
             i += 1
 
+        # Keep the particle combinaisons with/without interaction
         df.drop(["X", "Y"], axis=1, inplace=True)
-
-        cols = list(df.columns.values) 
-        order = [cols[1]] + [cols[0]] + cols[2:]   
-
         df.drop_duplicates(inplace=True)
 
+        # For particle with both interacting and non-interacting portions, keep only the information for the interaction
+        cols = list(df.columns.values) 
         df.sort_values(by=cols, inplace=True)
         df = pd.concat([df[df.fillna(method='ffill').duplicated(keep='last')], df[~df.fillna(method='ffill').duplicated(keep=False)]]) # ajouter les non-NaN
         df.sort_values(by=cols, inplace=True)
+
+        # Order the dataframe with frame as the first column
+        order = [cols[1]] + [cols[0]] + cols[2:]   
         df = df.reindex(columns=order)
-        
+
         # Write the output 
         os.makedirs(self.description['Output'], exist_ok=True)
         full_output_file_path = os.path.join(self.description['Output'], 'DCTracker.csv')
         with open(full_output_file_path, 'w') as f:
-            for name, c in count.items():
-                f.write('#'+name+' '+str(c)+'\n')
-            
             df.to_csv(f, index=False)
 
 
