@@ -93,6 +93,10 @@ class DCTracker:
         order = [cols[1]] + [cols[0]] + cols[2:]   
         df = df.reindex(columns=order)
 
+        # Change the particle ID type to Int64 (to accept NaN) to simplify the output
+        for col in cols:
+            df[col] = df[col].astype('Int64')
+
         # Write the output 
         os.makedirs(self.description['Output'], exist_ok=True)
         full_output_file_path = os.path.join(self.description['Output'], 'DCTracker.csv')
