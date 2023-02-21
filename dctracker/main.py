@@ -22,12 +22,14 @@ import sys
 import pathlib
 import datetime 
 import multiprocessing
+import json
 from platform import python_version
 
 import configobj
 
 from dctracker.dctracker import DCTracker 
 from dctracker.dctracker import InvalidCentroidError
+from dctracker.colocalize import Colocalize
 from dctracker.log import Logger
 from dctracker.config import *
 from dctracker.version import __version__
@@ -76,11 +78,11 @@ class Runner():
 
         # Run DCTracker in parallel
         params = self.prepare_run()
-        #for param in params:
-        #    print(param)
-        #    self.run_dctracker(param)
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(self.run_dctracker, params)
+        for param in params:
+            print(param)
+            self.run_analysis(param)
+        #with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        #    pool.map(self.run_dctracker, params)
 
 
     def exit_on_error(self, message, context):
@@ -194,7 +196,7 @@ class Runner():
 
         for particle_name in list_particle_key(self.config):
             particle = particle_dict.copy()
-            particle['Particle'] = particle_name
+            particle['Name'] = particle_name
                             
             particle_config = self.config['Input'][particle_name]
 
@@ -224,18 +226,39 @@ class Runner():
         return particles
 
 
-    def run_dctracker(self, params):
+    def run_analysis(self, params):
         """
-        Run DCTracker
+        Run the complete analysis pipeline : DCTracker, Colocalize and write the cell JSON file
 
         Arguments:
             params: DCTracker module parameters
         """
+
         try:
             DCTracker(params)
+            Colocalize(params)
+            self.write_json(params)
+            exit()
         except InvalidCentroidError:
             self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(params[0]['Label']), extra={'context': self.context})
 
+
+    def write_json(self, params):
+        """Write the cell information in JSON format in the output directory"""
+
+        # Generate a dict that contains the JSON object
+        description = params[0]
+        metadata = {
+            'Condition': description['Condition'],
+            'Replicate': description['Replicate'][0], 
+            'Label': description['Label']
+        }
+
+        # Write the metadata
+        full_json_file_path = os.path.join(description['Output'], 'Metadata.json')
+        with open(full_json_file_path, "w") as h:
+            json.dump(metadata, h, indent = 4)
+        
 
 class CLIRunner(Runner):
 

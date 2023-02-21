@@ -33,9 +33,9 @@ if parent_dir not in sys.path:
 from dctracker.main import CLIRunner, GUIRunner
 
 if __name__ == "__main__":
-    # DCTracker requires at lest Python >= 3.3 but was tested with Python 3.11 only 
-    if sys.version_info < (3,3,0):
-        raise RuntimeError("Non-supported Python version. A Python version >= 3.3 is required.")
+    # Might work on lower Python version, but DCTracker was only tested on Python 3.11
+    if sys.version_info < (3,11,0):
+        raise RuntimeError("Non-supported Python version. A Python version >= 3.11 is required.")
     
     # On Windows, check the process parent name as suggested here https://stackoverflow.com/a/558804
     # When started by double click, the parent process is "py.exe"
