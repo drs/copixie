@@ -162,7 +162,9 @@ class Runner():
                     if len(path_to_list(root)) == real_depth:
                         # Generate the cell dictionary 
                         cell = dict()
-                        label = '/'.join(path_to_list(root)[-int(self.config['Input']['Depth']):])
+                        label=""
+                        if self.config['Input']['Depth'] > 0:
+                            label = '/'.join(path_to_list(root)[-int(self.config['Input']['Depth']):])
                         full_output_path = os.path.join(self.output_dir, replicate_path, label)
                         cell['Condition'] = condition
                         cell['Replicate'] = replicate
