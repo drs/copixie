@@ -96,16 +96,31 @@ class DCTracker:
         df.drop(["X", "Y"], axis=1, inplace=True)
         df.drop_duplicates(inplace=True)
 
-        # For particle with both interacting and non-interacting portions, keep only the information for the interaction
-        cols = list(df.columns.values) 
-        df.sort_values(by=cols, inplace=True)
-        df = pd.concat([df[df.fillna(method='ffill').duplicated(keep='last')], df[~df.fillna(method='ffill').duplicated(keep=False)]]) # ajouter les non-NaN
-        df.sort_values(by=cols, inplace=True)
-
         # Order the dataframe with frame as the first column
+        cols = list(df.columns.values) 
         order = [cols[1]] + [cols[0]] + cols[2:]   
         df = df.reindex(columns=order)
+        df.sort_values(by=order, inplace=True)
 
+        # Keep rows with NaN in any columns only if the values in the other columns are not present elsewhere in the table
+        frames = []
+        for k,g in df.groupby(by="FRAME"):
+            # Create a boolean mask of rows that have NaN values
+            nan_mask = g.isna().any(axis=1)
+
+            # Create a boolean mask of rows that have unique values in at least one column
+            unique_masks = []
+            for col in g.columns[1:]:
+                unique_mask = g[col].isin(g[col].value_counts()[g[col].value_counts()==1].index)
+                unique_masks.append(unique_mask)
+            keep_mask = np.any(unique_masks, axis=0)
+
+            # Combine the masks and apply them to the DataFrame
+            keep = ~nan_mask | keep_mask
+            g = g[keep].reset_index(drop=True)
+            frames.append(g)
+        df = pd.concat(frames, axis=0)
+        
         # Change the particle ID type to Int64 (to accept NaN) to simplify the output
         for col in cols:
             df[col] = df[col].astype('Int64')
