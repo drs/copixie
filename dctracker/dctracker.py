@@ -102,8 +102,6 @@ class DCTracker:
         df = pd.concat([df[df.fillna(method='ffill').duplicated(keep='last')], df[~df.fillna(method='ffill').duplicated(keep=False)]]) # ajouter les non-NaN
         df.sort_values(by=cols, inplace=True)
 
-        
-
         # Order the dataframe with frame as the first column
         order = [cols[1]] + [cols[0]] + cols[2:]   
         df = df.reindex(columns=order)

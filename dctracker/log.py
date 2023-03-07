@@ -24,9 +24,9 @@ class ColoredFormatter(logging.Formatter):
     """
     Colored formatted for logging, adapted from https://stackoverflow.com/a/56944256
     """
-
-    YELLOW = '\x1b[38;5;226m'
-    RED = '\x1b[38;5;196m'
+    
+    YELLOW = '\x1b[33m'
+    RED = '\x1b[31m'
     BOLD_RED = '\x1b[31;1m'
     RESET = '\x1b[0m'
 
@@ -35,18 +35,23 @@ class ColoredFormatter(logging.Formatter):
         self.fmt = fmt
         self.datefmt = datefmt
         # Add ANSI escape code if supported by the console 
+        self.FORMATS = None
         if self.console_supports_ansi():
             self.FORMATS = {
                 logging.DEBUG: self.fmt,
                 logging.INFO: self.fmt,
                 logging.WARNING: self.YELLOW + self.fmt + self.RESET,
-                logging.ERROR: self.RED + self.fmt + self.RESET,
+                logging.ERROR: self.BOLD_RED + self.fmt + self.RESET,
                 logging.CRITICAL: self.BOLD_RED + self.fmt + self.RESET
             }
         
 
     def format(self, record):
-        log_fmt = self.FORMATS.get(record.levelno)
+        if self.FORMATS:
+            log_fmt = self.FORMATS.get(record.levelno)
+        else:
+            log_fmt = self.fmt
+        
         formatter = logging.Formatter(log_fmt, datefmt=self.datefmt)
         return formatter.format(record)
 

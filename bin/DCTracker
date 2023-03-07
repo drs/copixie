@@ -44,12 +44,18 @@ if __name__ == "__main__":
         if p.name() == 'py.exe':
             GUIRunner()
         else:
-            CLIRunner()
+            if len(sys.argv) > 1:
+                CLIRunner()
+            else:
+                GUIRunner()
     # On Linux, check for sys.stdin.isatty() as suggested here https://stackoverflow.com/a/35784108
     # this might work for Darwin (macOS), but was not tested yet
     elif sys.platform == 'linux':
         if sys.stdin.isatty():
-            CLIRunner()
+            if len(sys.argv) > 1:
+                CLIRunner()
+            else:
+                GUIRunner()
         else:
             GUIRunner()
     else:
