@@ -73,7 +73,6 @@ class DCTracker:
                     table = self.make_static(table, name)
 
                 table.rename({'TRACK_ID': name}, axis=1, inplace=True)
-
             tables.append(table)
 
             i += 1
@@ -190,11 +189,17 @@ class DCTracker:
                 for n in neighbour:
                     if not n in completed:
                         if static:
-                            if mask[int(n[1])][int(n[0])] != 0:
-                                visited.add(n)
+                            try:
+                                if mask[int(n[1])][int(n[0])] != 0:
+                                    visited.add(n)
+                            except IndexError:
+                                pass 
                         else:
-                            if mask[track_time][int(n[1])][int(n[0])] != 0:
-                                visited.add(n)
+                            try:
+                                if mask[track_time][int(n[1])][int(n[0])] != 0:
+                                    visited.add(n)
+                            except IndexError:
+                                pass
             
             # Add the results to the lists
             x.extend([c[0] for c in completed])
