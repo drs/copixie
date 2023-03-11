@@ -93,10 +93,11 @@ class Runner():
 
         # Run DCTracker in parallel
         params = self.prepare_run()
-        for param in params:
-            self.run_analysis(param)
-        #with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-        #    pool.map(self.run_dctracker, params)        
+        #for param in params:
+        #    self.run_analysis(param)
+        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+            pool.map(self.run_dctracker, params)
+        self.logger.info("Done.", extra={'context': self.context})
 
 
     def parse_metadata(self):
