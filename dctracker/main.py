@@ -96,7 +96,7 @@ class Runner():
         #for param in params:
         #    self.run_analysis(param)
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(self.run_dctracker, params)
+            pool.map(self.run_analysis, params)
         self.logger.info("Done.", extra={'context': self.context})
 
 
