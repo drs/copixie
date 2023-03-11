@@ -22,7 +22,6 @@ import sys
 import pathlib
 import datetime 
 import multiprocessing
-import json
 import logging
 from platform import python_version
 
@@ -36,9 +35,8 @@ try:
 except ImportError:
     pass
 
-from dctracker.dctracker import DCTracker 
-from dctracker.dctracker import InvalidCentroidError
-from dctracker.colocalize import Colocalize
+
+from dctracker.pipeline import Pipeline
 from dctracker.log import Logger, ColoredFormatter
 from dctracker.config import *
 from dctracker.version import __version__
@@ -93,10 +91,10 @@ class Runner():
 
         # Run DCTracker in parallel
         params = self.prepare_run()
+        
+        Pipeline(params)
         #for param in params:
         #    self.run_analysis(param)
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(self.run_analysis, params)
         self.logger.info("Done.", extra={'context': self.context})
 
 
@@ -236,39 +234,6 @@ class Runner():
             particles.append(particle)
         
         return particles
-
-
-    def run_analysis(self, params):
-        """
-        Run the complete analysis pipeline : DCTracker, Colocalize and write the cell JSON file
-
-        Arguments:
-            params: DCTracker module parameters
-        """
-
-        try:
-            DCTracker(params)
-            Colocalize(params)
-            self.write_json(params)
-        except InvalidCentroidError:
-            self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(params[0]['Label']), extra={'context': self.context})
-
-
-    def write_json(self, params):
-        """Write the cell information in JSON format in the output directory"""
-
-        # Generate a dict that contains the JSON object
-        description = params[0]
-        metadata = {
-            'Condition': description['Condition'],
-            'Replicate': description['Replicate'][0], 
-            'Label': description['Label']
-        }
-
-        # Write the metadata
-        full_json_file_path = os.path.join(description['Output'], 'Metadata.json')
-        with open(full_json_file_path, "w") as h:
-            json.dump(metadata, h, indent = 4)
         
 
     def validate_user_parameters(self):
