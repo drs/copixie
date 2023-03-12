@@ -93,7 +93,7 @@ def parse_config(config, min_input_count=2):
     for entry in flatten_errors(config, results):
         section_list, key, error = entry
         if error == False:
-            msg = "The parameter %s is not in the config file\n" % section_key_string
+            msg = "The parameter %s is not in the config file\n" % section_key_string(section_list, key)
             msg += "Please check to make sure this parameter is present and there are no mis-spellings."
             raise ConfigError(msg)
 
