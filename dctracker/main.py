@@ -93,8 +93,6 @@ class Runner():
         params = self.prepare_run()
         
         Pipeline(params)
-        #for param in params:
-        #    self.run_analysis(param)
         self.logger.info("Done.", extra={'context': self.context})
 
 
@@ -139,6 +137,10 @@ class Runner():
         def path_to_list(path):
             return os.path.normpath(path).lstrip(os.path.sep).split(os.path.sep)
 
+        # Variable to handle incorrect paths error
+        # Initially set at True, and must be changed to False if valid input are encountered 
+        no_analysis_directory = True 
+
         # Prepare the datastructure for the DCTracker module
         dctracker_args = []
 
@@ -149,13 +151,15 @@ class Runner():
                 replicate_id = replicate[0]
                 replicate_path = replicate[1]
                 full_replicate_path = os.path.join(self.input_dir, replicate_path)
+
+                if os.path.isdir(full_replicate_path):
+                    no_analysis_directory = False 
                 
                 # Cells file structure are exclusively searched at the depth specified in Input/Depth relative 
                 # to the input path in the config (the real search depth is therefore the sum of the input 
                 # depth and config depth)
                 start_depth = len(path_to_list(full_replicate_path))
                 real_depth = start_depth + int(self.config['Input']['Depth'])
-
                 for root, dirs, files in os.walk(full_replicate_path):
                     # Process only folders at the search depth
                     if len(path_to_list(root)) == real_depth:
@@ -175,6 +179,12 @@ class Runner():
                             dctracker_args.append([cell] + particles)
                         except InvalidInputError as e:
                             self.logger.warning("Input folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.context})
+        
+        # Handle invalid input
+        if no_analysis_directory:
+            raise HaltException("Input filestructure does not contain any valid input directory. This is likely due to an error in the configuration file, or in the input parameter.")
+        if not dctracker_args:
+            raise HaltException("Input filestructure does not contain any valid input file. This is likely due to an error in the configuration file, or in the input parameter.")
 
         return dctracker_args
 
@@ -250,10 +260,9 @@ class Runner():
         
         # Check that input files and directory exists and are readable
         # (readabily is not reported as it's not expected to occur during normal use)
-        if os.path.isdir(self.input_dir):
-            if not os.access(self.input_dir, os.R_OK):
+        if not os.access(self.input_dir, os.R_OK):
                 raise HaltException("Input path points to a non-existing directory.")
-        else:
+        elif not os.path.isdir(self.input_dir):
             raise HaltException("Input path points to file. The input must be a directory.")
         if not os.access(self.config_file, os.R_OK):
             raise HaltException("Configuration path points to a non-existing file.")
@@ -267,11 +276,11 @@ class Runner():
             if os.path.isdir(self.output_dir): 
                 if os.access(self.output_dir, os.W_OK):
                     if len(os.listdir(self.output_dir)) > 0:
-                        raise HaltException("Cowardly refusing to overwrite an existing non-empty directory.")
+                        raise HaltException("Output path points to an existing non-empty directory.")
                 else:
                     raise HaltException("Output path points to a non-writable directory.")
             else:
-                raise HaltException("Cowardly refusing to overwrite an existing file.")
+                raise HaltException("Output path points to an existing file.")
         # Make sure that the parent directory is writable
         else:
             parent_dir = pathlib.Path(self.output_dir).parents[0]
@@ -305,7 +314,7 @@ class CLIRunner(Runner):
         try:
             super().main()
         except HaltException as e:
-            self.logger.critical(e, extra={'context': self.context})
+            self.logger.error(e, extra={'context': self.context})
             sys.exit(1)
         
 
