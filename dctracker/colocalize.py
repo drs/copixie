@@ -59,5 +59,5 @@ class Colocalize:
         
         # Write the output
         full_output_file_path = os.path.join(self.description['Output'], 'Colocalize.csv')
-        with open(full_output_file_path, 'w') as f:
+        with open(full_output_file_path, 'w', newline='') as f:
             colocalisation.to_csv(f, index=False)

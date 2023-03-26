@@ -127,7 +127,7 @@ class DCTracker:
         # Write the output 
         os.makedirs(self.description['Output'], exist_ok=True)
         full_output_file_path = os.path.join(self.description['Output'], 'DCTracker.csv')
-        with open(full_output_file_path, 'w') as f:
+        with open(full_output_file_path, 'w', newline='') as f:
             df.to_csv(f, index=False)
 
 
@@ -283,5 +283,3 @@ class DCTracker:
         
         df = pd.DataFrame(list(zip(x, y, ids, times)), columns=['X', 'Y', 'TRACK_ID', 'FRAME'])
         return df 
-
-
