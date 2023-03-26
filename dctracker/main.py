@@ -493,6 +493,7 @@ class GUIRunner(Runner):
 
 
     def run_main(self):
+        self.textedit_logger.widget.clear()
         self.run_button.setEnabled(False)
         self.worker.start()
 
