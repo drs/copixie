@@ -456,14 +456,18 @@ class GUIRunner(Runner):
 
 
     def main(self):
-        try:
-            self.config_file = self.config_field.text()
-            self.input_dir = self.input_field.text()
-            self.output_dir = self.output_field.text()
-            self.metadata_file = self.metadata_field.text()
+        # Set variables 
+        self.config_file = self.config_field.text()
+        self.input_dir = self.input_field.text()
+        self.output_dir = self.output_field.text()
+        self.metadata_file = self.metadata_field.text()
 
+        try:
             super().main()
         except HaltException as e:
+            self.logger.error(e, extra={'context': self.context})
+        except Exception as e:
+            self.logger.error("An unhandled except occured during DCTracker run. Please consider reporting the issue to help DCTracker development." , extra={'context': self.context})
             self.logger.error(e, extra={'context': self.context})
 
 
