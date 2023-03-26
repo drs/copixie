@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os 
 import sys 
+import subprocess 
 
 import psutil
 
@@ -55,7 +56,13 @@ if __name__ == "__main__":
             if len(sys.argv) > 1:
                 CLIRunner()
             else:
-                GUIRunner()
+                # Validate that there is a display available. 
+                # xdpyinfo should run without error is one is available as described in https://stackoverflow.com/a/12123998
+                p = subprocess.run(['xdpyinfo'], stdout=open(os.devnull, 'wb'), stderr=open(os.devnull, 'wb')) 
+                if p.returncode == "0":
+                    GUIRunner()
+                else:
+                    CLIRunner()
         else:
             GUIRunner()
     else:

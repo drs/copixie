@@ -32,7 +32,7 @@ try:
     from PyQt6 import QtCore
     from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
     from PyQt6.QtWidgets import QApplication, QWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMainWindow, QFileDialog, QTextEdit, QStyle
-except ImportError:
+except ModuleNotFoundError:
     pass
 
 
@@ -346,7 +346,7 @@ class GUIRunner(Runner):
         # Import PyQt6 module here so DCTracker can be used from command line without installing PyQt6
         try:
             from PyQt6 import QtCore 
-        except ImportError as e:
+        except ModuleNotFoundError as e:
             # Warn the user if PyQt6 is not installed (only on Windows for now, MacOS or Linux user should be able to figure
             # it out by themselves ¯\_(ツ)_/¯ )
             if sys.platform == 'win32':
