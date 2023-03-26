@@ -83,7 +83,7 @@ def parse_config(config, min_input_count=2):
     # Validate that either a mask or radius is provided for each particle
     for particle in list_particle_key(config):
         if not config['Input'][particle]["Radius"] and not config['Input'][particle]["MaskFile"]: 
-            msg = "No mask file or particle radius is provided in the configuration for the particle \"%s\".".format(particle)
+            msg = "No mask file or particle radius is provided in the configuration for the particle \"{}\".".format(particle)
             raise ConfigError(msg)
 
     # Analyse the validator results to return user readable error messages 
@@ -93,8 +93,7 @@ def parse_config(config, min_input_count=2):
     for entry in flatten_errors(config, results):
         section_list, key, error = entry
         if error == False:
-            msg = "The parameter %s is not in the config file\n" % section_key_string(section_list, key)
-            msg += "Please check to make sure this parameter is present and there are no mis-spellings."
+            msg = "The required parameter \"{}\" is not in the config file.".format(section_key_string(section_list, key))
             raise ConfigError(msg)
 
         if key is not None:
@@ -104,12 +103,12 @@ def parse_config(config, min_input_count=2):
             # Raise an exception based on the type of error in the config
             if isinstance(error, VdtValueError):
                 option_string = config_item(config.configspec, section_list, key)[7:-1]
-                msg = "The parameter \"%s\" is set to \"%s\" which is not one of the allowed values. Please set the value to be one of the following options : %s" % (section_key_string(section_list, key), key_string, option_string)
+                msg = "The parameter \"{}\" is set to \"{}\" which is not one of the allowed values. Please set the value to be one of the following options : {}".format((section_key_string(section_list, key), key_string, option_string))
                 raise ConfigValueError(msg)
 
             if isinstance(error, VdtTypeError):
                 type_string = config_item(config.configspec, section_list, key)
-                msg = "The parameter \"%s\" is set to \"%s\" which is not one of the allowed types. Please set the value to be of type : %s" % (section_key_string(section_list, key), key_string, type_string)
+                msg = "The parameter \"{}\" is set to \"{}\" which is not one of the allowed types. Please set the value to be of type : {}".format((section_key_string(section_list, key), key_string, type_string))
                 raise ConfigTypeError(msg)
 
     return config
@@ -127,7 +126,7 @@ def section_key_string(section_list, key):
     Returns a string with the complete section and key for a config item. Sections are 
     separated by backslash
     """
-    return '/'.join(next(filter(None, i)) for i in zip(section_list, [key]))
+    return '/'.join([x for x in section_list + [key] if x is not None])
 
 
 def config_item(config, section_list, key):

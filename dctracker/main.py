@@ -116,7 +116,7 @@ class Runner():
                     l = l.strip().split(",")
                     # Raise an error if the metadata does not contain the 3 columns required
                     if len(l) != 3:
-                        raise ValueError("Metadata contains {} columns but 3 were expected. Please refer to the documentation for the metadata file format.").format(len(l))
+                        raise ValueError("Metadata contains {} columns but 3 were expected. Please refer to the documentation for the metadata file format.".format(len(l)))
                     
                     # Add key to dict if it does not exist yet
                     if not l[0] in metadata:
