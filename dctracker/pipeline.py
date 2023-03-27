@@ -60,7 +60,9 @@ class Pipeline():
         metadata = {
             'Condition': description['Condition'],
             'Replicate': description['Replicate'][0], 
-            'Label': description['Label']
+            'Label': description['Label'],
+            'PixelSize': description['PixelSize'],
+            'FrameInterval': description['FrameInterval']
         }
 
         # Write the metadata

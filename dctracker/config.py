@@ -26,6 +26,7 @@ from validate import Validator, VdtValueError, VdtTypeError
 CONFIG_SPECS = """
 [General]
 PixelSize = float
+FrameInterval = float
 
 [Input]
 Depth = integer
@@ -34,7 +35,7 @@ Depth = integer
     Static = option('y', 'yes', 'Yes', 'n', 'no', 'No', default='no')
     TrackFile = string
     Radius = float(default=None)
-    MaskFile = string(default=None) 
+    MaskFile = string(default=None)
 """
 
 

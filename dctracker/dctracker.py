@@ -56,9 +56,9 @@ class DCTracker:
 
             if particle['MaskFile']:
                 if particle['Static']:
-                    table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=particle['PixelSize'], static=True)
+                    table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=self.description['PixelSize'], static=True)
                 else:
-                    table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=particle['PixelSize'])
+                    table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=self.description['PixelSize'])
 
                 # Make sure the static image contains a single image 
                 # Otherwise discard all but the first frame 
@@ -67,7 +67,7 @@ class DCTracker:
 
                 table.rename({'TRACK_ID': name}, axis=1, inplace=True)
             else:
-                table = self.centroid_to_table(track_file=particle['TrackFile'], radius=particle['Radius'], pixel_size=particle['PixelSize'])
+                table = self.centroid_to_table(track_file=particle['TrackFile'], radius=particle['Radius'], pixel_size=self.description['PixelSize'])
 
                 if particle['Static']:
                     table = self.make_static(table, name)

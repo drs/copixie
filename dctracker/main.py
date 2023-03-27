@@ -173,6 +173,8 @@ class Runner():
                         cell['Replicate'] = replicate
                         cell['Label'] = label
                         cell['Output'] = full_output_path
+                        cell['PixelSize'] = self.config['General']['PixelSize']
+                        cell['FrameInterval'] = self.config['General']['FrameInterval']
                         
                         try:
                             particles = self.parse_cell(root)
@@ -206,7 +208,6 @@ class Runner():
             'Name': '',
             'TrackFile': '',
             'MaskFile': '', # Optional
-            'PixelSize': self.config['General']['PixelSize'],
             'Radius': 0.0, # Optional but required if no mask
             'Static': False,
         }
