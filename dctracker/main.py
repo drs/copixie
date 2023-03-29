@@ -36,7 +36,7 @@ except ModuleNotFoundError:
     pass
 
 
-from dctracker.pipeline import Pipeline
+from dctracker.pipeline import Pipeline, UnhandledPostprocessingError, CalledProcessError
 from dctracker.log import Logger, ColoredFormatter
 from dctracker.config import *
 from dctracker.version import __version__
@@ -63,7 +63,7 @@ class Runner():
     def main(self):
         # Set the content and start logging at this point (everything logged before is fatal errors)
         self.context = 'Main'
-        self.logger.info("Starting DCTracker. Version {}".format(__version__), extra={'context': self.context})
+        self.logger.info("Starting DCTracker (version {})".format(__version__), extra={'context': self.context})
         self.logger.debug("Python version: {}".format(python_version()), extra={'context': self.context})
 
         # Validate that the inputs and output exists and are readable or writable
@@ -91,8 +91,24 @@ class Runner():
 
         # Run DCTracker in parallel
         params = self.prepare_run()
-        
-        Pipeline(params)
+
+        if 'Postprocessing' in self.config:
+            if 'Command' in self.config['Postprocessing']:
+                try:
+                    Pipeline(params, [self.output_dir, self.config['Postprocessing']['Command']])
+                except FileNotFoundError:
+                    msg = "The command file \"{}\" was not found. Make sure that this program is in the PATH or that the path in the configuration file is correct.".format(self.config['Postprocessing']['Command'])
+                    raise HaltException(msg)
+                except CalledProcessError as e:
+                    raise HaltException(e)
+                except UnhandledPostprocessingError as e:
+                    msg = "An error occured during the execution of the postprocessing step. This is not handled by DCTracker, but here is the error message to help you debugging : \n{}".format(e)
+                    raise HaltException(msg)
+            else:
+                Pipeline(params)
+        else:
+            Pipeline(params)
+
         self.logger.info("Done.", extra={'context': self.context})
 
 

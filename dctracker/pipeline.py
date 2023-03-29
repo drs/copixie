@@ -19,24 +19,40 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import multiprocessing
 import os
 import json
+import subprocess
 
 from dctracker.dctracker import DCTracker
 from dctracker.dctracker import InvalidCentroidError
 from dctracker.colocalize import Colocalize
 from dctracker.log import Logger
 
+
+class UnhandledPostprocessingError(RuntimeError):
+    """Raise if an unhandled exception occurs during the postprocessing""" 
+
+
+class CalledProcessError(RuntimeError):
+    """Raise if the post-processing process exits with a non-zero error code""" 
+
+
 class Pipeline():
     """
     This class runs DCTracker analysis pipeline
     """
 
-    def __init__(self, params):
+    def __init__(self, params, postprocessing=[]):
         # Run the pipeline in multiprocessing
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(self.run_analysis, params)
+            pool.map(self.run_dctracker, params)
+
+        # Run the post-processing tasks
+        if postprocessing:
+            output_dir = postprocessing[0]
+            postprocessing_cmd = postprocessing[1]
+            self.run_postprocessing(params, output_dir, postprocessing_cmd)
 
 
-    def run_analysis(self, params):
+    def run_dctracker(self, params):
         """
         Run the complete analysis pipeline : DCTracker, Colocalize and write the cell JSON file
 
@@ -69,3 +85,26 @@ class Pipeline():
         full_json_file_path = os.path.join(description['Output'], 'Metadata.json')
         with open(full_json_file_path, "w") as h:
             json.dump(metadata, h, indent = 4)
+
+
+    def run_postprocessing(self, params, output_dir, cmd):
+        """
+        Run the post-processing command on DCTracker output directory
+        """
+        if cmd:
+            # List all the cells analyzed by DCTracker 
+            cells = []
+            for cell in params:
+                cells.append(cell[0]['Output'])
+            
+            # Try to run the postprocessing command
+            try:
+                result = subprocess.run(cmd.split(' ') + [output_dir, ','.join(cells)], capture_output=True)
+            except FileNotFoundError as e:
+                raise
+            except Exception as e: # Not handled in this version, will be handled by the main program
+                raise UnhandledPostprocessingError(e)
+            
+            if result.returncode != 0:
+                msg = "Post-processing command failed with the error {}.".format(result.stderr.decode('utf-8'))
+                raise CalledProcessError(msg)
