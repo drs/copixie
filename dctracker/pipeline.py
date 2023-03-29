@@ -20,6 +20,7 @@ import multiprocessing
 import os
 import json
 import subprocess
+import logging 
 
 from dctracker.dctracker import DCTracker
 from dctracker.dctracker import InvalidCentroidError
@@ -41,12 +42,18 @@ class Pipeline():
     """
 
     def __init__(self, params, postprocessing=[]):
+        # Start the logger
+        self.logger = logging.getLogger()
+        self.CONTEXT = "Pipeline"
+
         # Run the pipeline in multiprocessing
+        self.logger.info("Starting DCTracker pipeline (DCTracker+Colocalize)", extra={'context': self.CONTEXT})
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.map(self.run_dctracker, params)
 
         # Run the post-processing tasks
         if postprocessing:
+            self.logger.info("Running post-processing tasks", extra={'context': self.CONTEXT})
             output_dir = postprocessing[0]
             postprocessing_cmd = postprocessing[1]
             self.run_postprocessing(params, output_dir, postprocessing_cmd)

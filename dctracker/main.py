@@ -58,13 +58,12 @@ class Runner():
     def __init__(self):
         # Start the logger
         self.logger = Logger().logger
-
+        self.CONTEXT = "Main"
     
     def main(self):
         # Set the content and start logging at this point (everything logged before is fatal errors)
-        self.context = 'Main'
-        self.logger.info("Starting DCTracker (version {})".format(__version__), extra={'context': self.context})
-        self.logger.debug("Python version: {}".format(python_version()), extra={'context': self.context})
+        self.logger.info("Starting DCTracker (version {})".format(__version__), extra={'context': self.CONTEXT})
+        self.logger.debug("Python version: {}".format(python_version()), extra={'context': self.CONTEXT})
 
         # Validate that the inputs and output exists and are readable or writable
         self.validate_user_parameters()
@@ -81,13 +80,15 @@ class Runner():
         except ConfigTypeError as e:
             raise HaltException(e.args[0])
 
-        self.logger.info("Found a valid configuration.", extra={'context': self.context})
+        self.logger.info("Found a valid configuration.", extra={'context': self.CONTEXT})
 
         # Parse the metadata
         try:
             self.metadata = self.parse_metadata()
         except ValueError as e:
             raise HaltException(e)
+
+        self.logger.info("Found a valid metadata file with {} conditions.".format(len(self.metadata)), extra={'context': self.CONTEXT})
 
         # Run DCTracker in parallel
         params = self.prepare_run()
@@ -109,7 +110,7 @@ class Runner():
         else:
             Pipeline(params)
 
-        self.logger.info("Done.", extra={'context': self.context})
+        self.logger.info("Done.", extra={'context': self.CONTEXT})
 
 
     def parse_metadata(self):
@@ -196,7 +197,7 @@ class Runner():
                             particles = self.parse_cell(root)
                             dctracker_args.append([cell] + particles)
                         except InvalidInputError as e:
-                            self.logger.warning("Input folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.context})
+                            self.logger.warning("Input folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.CONTEXT})
         
         # Handle invalid input
         if no_analysis_directory:
@@ -311,8 +312,6 @@ class CLIRunner(Runner):
         # Initialize the global variable from parent class 
         super().__init__()
 
-        # Define the content for the logger 
-        self.context = 'Initialization'
         # Parse the command line arguments
         args = self.get_arguments()
 
@@ -331,7 +330,7 @@ class CLIRunner(Runner):
         try:
             super().main()
         except HaltException as e:
-            self.logger.error(e, extra={'context': self.context})
+            self.logger.error(e, extra={'context': self.CONTEXT})
             sys.exit(1)
         
 
@@ -379,9 +378,6 @@ class GUIRunner(Runner):
                 import ctypes
                 MessageBox = ctypes.windll.user32.MessageBoxW
                 MessageBox(None, 'Cannot start DCTracker from GUI. PyQt6 module is not installed.', 'DCTracker', 0)
-
-        # Define the content for the logger 
-        self.context = 'Initialization'
 
         # Create the main window widget 
         app = QApplication(sys.argv)
@@ -482,10 +478,10 @@ class GUIRunner(Runner):
         try:
             super().main()
         except HaltException as e:
-            self.logger.error(e, extra={'context': self.context})
+            self.logger.error(e, extra={'context': self.CONTEXT})
         except Exception as e:
-            self.logger.error("An unhandled except occured during DCTracker run. Please consider reporting the issue to help DCTracker development." , extra={'context': self.context})
-            self.logger.error(e, extra={'context': self.context})
+            self.logger.error("An unhandled except occured during DCTracker run. Please consider reporting the issue to help DCTracker development." , extra={'context': self.CONTEXT})
+            self.logger.error(e, extra={'context': self.CONTEXT})
 
 
     # Button signals handling functions 
