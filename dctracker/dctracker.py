@@ -17,12 +17,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 
-import os
 import sys
 import configparser
 import itertools
 import operator
 import math
+import pathlib 
 
 from skimage import io
 import numpy as np 
@@ -125,8 +125,9 @@ class DCTracker:
             df[col] = df[col].astype('Int64')
 
         # Write the output 
-        os.makedirs(self.description['Output'], exist_ok=True)
-        full_output_file_path = os.path.join(self.description['Output'], 'DCTracker.csv')
+        pathlib.Path(self.description['Output']).mkdir(parents=True, exist_ok=True)
+        
+        full_output_file_path = pathlib.Path(self.description['Output'], 'DCTracker.csv')
         with open(full_output_file_path, 'w', newline='') as f:
             df.to_csv(f, index=False)
 

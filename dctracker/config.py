@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import io 
-from pathlib import Path
+import pathlib
 
 from configobj import ConfigObj, flatten_errors
 from validate import Validator, VdtValueError, VdtTypeError
@@ -29,8 +29,6 @@ PixelSize = float
 FrameInterval = float
 
 [Input]
-Depth = integer
-
     [[__many__]]
     Static = option('y', 'yes', 'Yes', 'n', 'no', 'No', default='no')
     TrackFile = string
@@ -68,11 +66,11 @@ def parse_config(config, min_input_count=2):
         dict: Parsed configuration 
     """
     # Validate that the config file exists 
-    if not Path(config).is_file():
+    if not config.is_file():
         raise FileNotFoundError
     
     # Parse and validate the configuration file
-    config = ConfigObj(config, configspec=io.StringIO(CONFIG_SPECS))
+    config = ConfigObj(str(config), configspec=io.StringIO(CONFIG_SPECS))
     validator = Validator()
     results = config.validate(validator, preserve_errors=True)
 

@@ -23,10 +23,13 @@ import pathlib
 import datetime 
 import multiprocessing
 import logging
+import itertools
+import re 
 from platform import python_version
 
 import configobj
 from ansi2html import Ansi2HTMLConverter
+import pandas as pd
 
 try:
     from PyQt6 import QtCore
@@ -87,7 +90,7 @@ class Runner():
         except RuntimeError as e:
             raise HaltException(e)
 
-        self.logger.info("Found a valid metadata file with {} conditions.".format(len(self.metadata)), extra={'context': self.CONTEXT})
+        self.logger.info("Found a valid metadata file.".format(len(self.metadata)), extra={'context': self.CONTEXT})
 
         # Run DCTracker in parallel
         params = self.prepare_run()
@@ -149,15 +152,11 @@ class Runner():
         Returns: 
             list: of inputs to run the DCTracker module in parallel
         """
-
-        def path_to_list(path):
-            return os.path.normpath(path).lstrip(os.path.sep).split(os.path.sep)
-
         # Variable to handle incorrect paths error
         # Initially set at True, and must be changed to False if valid input are encountered 
         no_analysis_directory = True 
 
-        # Prepare the datastructure for the DCTracker module
+        # Prepare the datastructue for the DCTracker module
         dctracker_args = []
 
         # Iterate through every element of every conditions, than analyse the file structure to identify the cells 
@@ -165,50 +164,82 @@ class Runner():
             for replicate in self.metadata[condition]:
                 # Replicate information
                 replicate_id = replicate[0]
-                replicate_path = replicate[1]
-
-                # Build the full replicate path
-                if os.path.isabs(replicate_path): # Handle absolute path in the metadata 
-                    full_replicate_path = replicate_path
-                else:
-                    full_replicate_path = os.path.join(self.input_dir, replicate_path)
+                replicate_path = pathlib.Path(replicate[1])
                 
-                if os.path.isdir(full_replicate_path):
+                if replicate_path.is_dir():
                     no_analysis_directory = False 
-                    self.logger.warning("The directory \"{}\" does not exist. Please check that the paths in the metadata and the input path are correct.".format(full_replicate_path), extra={'context': self.CONTEXT})
+                else:
+                    self.logger.warning("The directory \"{}\" does not exist. Please check that the paths in the metadata correct.".format(full_replicate_path), extra={'context': self.CONTEXT})
+
+                # List the expected file name/relative path based on the configuration information
+                expected_files = []
+                for particle in self.config['Input']:
+                    if self.config['Input'][particle]['TrackFile']:
+                        expected_files.append(self.config['Input'][particle]['TrackFile'])
+                    if self.config['Input'][particle]['MaskFile']:
+                        expected_files.append(self.config['Input'][particle]['MaskFile'])
+
+                # Empty structure to list the file in the analysis filestructure
+                analysis_files = {key: list() for key in expected_files}
+
+                # Parse the analysis filestructure searching for the expected file name/relative path
+                for path in replicate_path.rglob('*'):
+                    if path.is_file():
+                        for k in analysis_files:
+                            if path.match(k):
+                                # Get the cell path by removing the path from the config (this can include a file and folder)
+                                suffix_len = len(pathlib.Path(k).parts)
+                                cell_path = pathlib.Path(*path.parts[:-suffix_len])
+                                analysis_files[k].append(cell_path) 
+                              
+                # Extract all the cell folder identified in the previous step
+                # The folder does not need to contain all the required file (based on the config)
+                # Incomplete folders will be handled after 
+                cell_folders = set(itertools.chain.from_iterable(analysis_files.values()))
                 
-                # Cells file structure are exclusively searched at the depth specified in Input/Depth relative 
-                # to the input path in the config (the real search depth is therefore the sum of the input 
-                # depth and config depth)
-                start_depth = len(path_to_list(full_replicate_path))
-                real_depth = start_depth + int(self.config['Input']['Depth'])
-                for root, dirs, files in os.walk(full_replicate_path):
-                    # Process only folders at the search depth
-                    if len(path_to_list(root)) == real_depth:
-                        # Generate the cell dictionary 
-                        cell = dict()
-                        label=""
-                        if self.config['Input']['Depth'] > 0:
-                            label = '/'.join(path_to_list(root)[-int(self.config['Input']['Depth']):])
-                        full_output_path = os.path.join(self.output_dir, replicate_path, label)
-                        cell['Condition'] = condition
-                        cell['Replicate'] = replicate
-                        cell['Label'] = label
-                        cell['Output'] = full_output_path
-                        cell['PixelSize'] = self.config['General']['PixelSize']
-                        cell['FrameInterval'] = self.config['General']['FrameInterval']
+                # Identify the part in the path that varies between the cells 
+                # This segment of the paths will be used as the label of the cells 
+                folder_lst = []
+                for folder in cell_folders:
+                    folder_lst.append(folder.parts)
+                df = pd.DataFrame(folder_lst)
+
+                # Efficient solution to identify columns where all values are identical (source: https://stackoverflow.com/a/54405767)
+                def unique_cols(df):
+                    a = df.to_numpy() # df.values (pandas<0.24)
+                    return (a[0] == a).all(0)
+                
+                label_start = -1
+                if not unique_cols(df).all():
+                    label_start = unique_cols(df).tolist().index(False)
+                
+                # Parse the file structure
+                for folder in cell_folders:
+                    # Generate the cell dictionary 
+                    cell = dict()
+                    label = ""
+                    if label_start > 0:
+                        label = '/'.join(folder.parts[label_start:])
+
+                    cell['Condition'] = condition
+                    cell['Replicate'] = replicate
+                    cell['Label'] = label
+                    full_output_path = pathlib.Path(self.output_dir, re.sub('[^0-9a-zA-Z-]+', '_', condition), re.sub('[^0-9a-zA-Z-]+', '_', replicate[0]), *folder.parts[label_start:])
+                    cell['Output'] = full_output_path
+                    cell['PixelSize'] = self.config['General']['PixelSize']
+                    cell['FrameInterval'] = self.config['General']['FrameInterval']
                         
-                        try:
-                            particles = self.parse_cell(root)
-                            dctracker_args.append([cell] + particles)
-                        except InvalidInputError as e:
-                            self.logger.warning("Input folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.CONTEXT})
-        
+                    try:
+                        particles = self.parse_cell(folder)
+                        dctracker_args.append([cell] + particles)
+                    except InvalidInputError as e:
+                        self.logger.warning("Folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.CONTEXT})
+
         # Handle invalid input
         if no_analysis_directory:
-            raise HaltException("Input filestructure does not contain any valid input directory. This is likely due to an error in the configuration file, or in the input parameter.")
+            raise HaltException("Filestructure does not contain any valid directory. This is likely due to an error in the configuration file or the metadata.")
         if not dctracker_args:
-            raise HaltException("Input filestructure does not contain any valid input file. This is likely due to an error in the configuration file, or in the input parameter.")
+            raise HaltException("Filestructure does not contain any valid file. This is likely due to an error in the configuration file or the metadata.")
 
         return dctracker_args
 
@@ -251,15 +282,15 @@ class Runner():
             
             # Every cell must at least contain a spot file that contains the centroid 
             # regardless of the analysis type
-            track_path = os.path.join(path, particle_config['TrackFile'])
-            if not os.path.isfile(track_path):
+            track_path = pathlib.Path(path, particle_config['TrackFile'])
+            if not track_path.is_file():
                 raise InvalidInputError(particle_config['TrackFile'])
             particle['TrackFile'] = track_path
 
             # Cells can have either a mask or a particle raduis (no mask)
             if particle_config['MaskFile']:
-                mask_path = os.path.join(path, particle_config['MaskFile'])
-                if not os.path.isfile(track_path):
+                mask_path = pathlib.Path(path, particle_config['MaskFile'])
+                if not mask_path.is_file():
                     raise InvalidInputError(particle_config['MaskFile'])
                 particle['MaskFile'] = mask_path
             else:
@@ -272,8 +303,6 @@ class Runner():
     def validate_user_parameters(self):
         # Check that the input variable are not empty (necessary for GUI only as command line
         # already validates)
-        if not self.input_dir:
-            raise HaltException("No input directory was provided.")
         if not self.output_dir:
             raise HaltException("No output directory was provided.")
         if not self.metadata_file:
@@ -283,10 +312,6 @@ class Runner():
         
         # Check that input files and directory exists and are readable
         # (readabily is not reported as it's not expected to occur during normal use)
-        if not os.access(self.input_dir, os.R_OK):
-                raise HaltException("Input path points to a non-existing directory.")
-        elif not os.path.isdir(self.input_dir):
-            raise HaltException("Input path points to file. The input must be a directory.")
         if not os.access(self.config_file, os.R_OK):
             raise HaltException("Configuration path points to a non-existing file.")
         if not os.access(self.metadata_file, os.R_OK):
@@ -295,10 +320,10 @@ class Runner():
         # Check if the output directory exists and is writable
         # This is done to avoid running the computation if the output cannot be written
         # If the output directory exist, make sure it's empty and writable
-        if os.path.exists(self.output_dir):
-            if os.path.isdir(self.output_dir): 
+        if self.output_dir.exists():
+            if self.output_dir.is_dir(): 
                 if os.access(self.output_dir, os.W_OK):
-                    if len(os.listdir(self.output_dir)) > 0:
+                    if len(list(self.output_dir.glob('*'))) > 0:
                         raise HaltException("Output path points to an existing non-empty directory.")
                 else:
                     raise HaltException("Output path points to a non-writable directory.")
@@ -322,10 +347,9 @@ class CLIRunner(Runner):
 
         # Generate the global variable from the command line arguments that are used 
         # in the parent class code
-        self.config_file = args.config
-        self.input_dir = args.input 
-        self.output_dir = args.output
-        self.metadata_file = args.metadata
+        self.config_file = pathlib.Path(args.config).resolve()
+        self.output_dir = pathlib.Path(args.output).resolve()
+        self.metadata_file = pathlib.Path(args.metadata).resolve()
 
         # Run the main analysis pipeline
         self.main()
@@ -346,8 +370,6 @@ class CLIRunner(Runner):
         parser = argparse.ArgumentParser(description="DualCam Particle Tracking Analysis")
         parser.add_argument('-c', '--config', type=pathlib.Path, required=True, 
                             help='Configuration file')
-        parser.add_argument('-i', '--input', type=pathlib.Path, required=True, 
-                            help="Input directory")
         parser.add_argument('-m', '--metadata', type=pathlib.Path, required=True, 
                             help="Metadate file")
         parser.add_argument('-o', '--output', type=pathlib.Path, default="DCTracker-{}".format(datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")), 
@@ -359,11 +381,6 @@ class CLIRunner(Runner):
             sys.exit(1)
         args = parser.parse_args()
 
-        # Change arguments paths to full paths
-        args.config = os.path.abspath(os.path.realpath(args.config))
-        args.output = os.path.abspath(os.path.realpath(args.output))
-        args.input = os.path.abspath(os.path.realpath(args.input))
-        args.metadata = os.path.abspath(os.path.realpath(args.metadata))
         return args
 
 
@@ -421,16 +438,6 @@ class GUIRunner(Runner):
         self.metadata_layout.addWidget(self.metadata_button)
         self.metadata_button.clicked.connect(self.open_metadata_file)
 
-        # Input related widgets
-        self.input_layout = QHBoxLayout()
-        self.input_label = QLabel("Input Directory")
-        self.input_field = PathLineEdit()
-        self.input_button = QPushButton()
-        self.input_button.setIcon(icon)
-        self.input_layout.addWidget(self.input_field)
-        self.input_layout.addWidget(self.input_button)
-        self.input_button.clicked.connect(self.open_input_dir)
-
         # Output related widgets
         self.output_layout = QHBoxLayout()
         self.output_label = QLabel("Output Directory")
@@ -461,7 +468,6 @@ class GUIRunner(Runner):
         self.main_layout = QFormLayout()
         self.main_layout.addRow(self.config_label, self.config_layout)
         self.main_layout.addRow(self.metadata_label, self.metadata_layout)
-        self.main_layout.addRow(self.input_label, self.input_layout)
         self.main_layout.addRow(self.output_label, self.output_layout)
         self.main_layout.addRow(self.textedit_logger.widget)
         self.main_layout.addRow(self.run_button)
@@ -475,10 +481,9 @@ class GUIRunner(Runner):
 
     def main(self):
         # Set variables 
-        self.config_file = self.config_field.text()
-        self.input_dir = self.input_field.text()
-        self.output_dir = self.output_field.text()
-        self.metadata_file = self.metadata_field.text()
+        self.config_file = pathlib.Path(self.config_field.text()).resolve()
+        self.output_dir = pathlib.Path(self.output_field.text()).resolve() 
+        self.metadata_file = pathlib.Path(self.metadata_field.text()).resolve()
 
         try:
             super().main()
@@ -500,12 +505,6 @@ class GUIRunner(Runner):
         file_name = QFileDialog.getOpenFileName(self.main_window, "Select Metadata File", "", "CSV Files (*.csv)")
         if file_name:
             self.metadata_field.setText(file_name[0])
-
-
-    def open_input_dir(self):
-        file_name = QFileDialog.getExistingDirectory(self.main_window, "Select Input Directory")
-        if file_name:
-            self.input_field.setText(file_name)
 
 
     def open_output_dir(self):
