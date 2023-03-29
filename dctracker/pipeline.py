@@ -17,10 +17,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import multiprocessing
-import os
 import json
 import subprocess
 import logging 
+import pathlib 
 
 from dctracker.dctracker import DCTracker
 from dctracker.dctracker import InvalidCentroidError
@@ -89,7 +89,7 @@ class Pipeline():
         }
 
         # Write the metadata
-        full_json_file_path = os.path.join(description['Output'], 'Metadata.json')
+        full_json_file_path = pathlib.Path(description['Output'], 'Metadata.json')
         with open(full_json_file_path, "w") as h:
             json.dump(metadata, h, indent = 4)
 
@@ -102,7 +102,7 @@ class Pipeline():
             # List all the cells analyzed by DCTracker 
             cells = []
             for cell in params:
-                cells.append(cell[0]['Output'])
+                cells.append(str(cell[0]['Output']))
             
             # Try to run the postprocessing command
             try:

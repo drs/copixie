@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 
-import os 
+import pathlib
 import pandas
 
 
@@ -33,7 +33,7 @@ class Colocalize:
 
     
     def main(self):
-        full_dctracker_file_path = os.path.join(self.description['Output'], 'DCTracker.csv')
+        full_dctracker_file_path = pathlib.Path(self.description['Output'], 'DCTracker.csv')
         dctracker = pandas.read_csv(full_dctracker_file_path, sep=',', comment='#')
 
         particle_names = []
@@ -58,6 +58,6 @@ class Colocalize:
             colocalisation[col] = colocalisation[col].astype('Int64')
         
         # Write the output
-        full_output_file_path = os.path.join(self.description['Output'], 'Colocalize.csv')
+        full_output_file_path = pathlib.Path(self.description['Output'], 'Colocalize.csv')
         with open(full_output_file_path, 'w', newline='') as f:
             colocalisation.to_csv(f, index=False)
