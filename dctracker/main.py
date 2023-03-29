@@ -35,7 +35,6 @@ try:
 except ModuleNotFoundError:
     pass
 
-
 from dctracker.pipeline import Pipeline, UnhandledPostprocessingError, CalledProcessError
 from dctracker.log import Logger, ColoredFormatter
 from dctracker.config import *
@@ -85,7 +84,7 @@ class Runner():
         # Parse the metadata
         try:
             self.metadata = self.parse_metadata()
-        except ValueError as e:
+        except RuntimeError as e:
             raise HaltException(e)
 
         self.logger.info("Found a valid metadata file with {} conditions.".format(len(self.metadata)), extra={'context': self.CONTEXT})
@@ -103,7 +102,7 @@ class Runner():
                 except CalledProcessError as e:
                     raise HaltException(e)
                 except UnhandledPostprocessingError as e:
-                    msg = "An error occured during the execution of the postprocessing step. This is not handled by DCTracker, but here is the error message to help you debugging : \n{}".format(e)
+                    msg = "An error occured during the execution of the postprocessing step. This is not handled by DCTracker, but here is the error message to help with the debugging : \n{}".format(e)
                     raise HaltException(msg)
             else:
                 Pipeline(params)
@@ -131,7 +130,7 @@ class Runner():
                     l = l.strip().split(",")
                     # Raise an error if the metadata does not contain the 3 columns required
                     if len(l) != 3:
-                        raise ValueError("Metadata contains {} columns but 3 were expected. Please refer to the documentation for the metadata file format.".format(len(l)))
+                        raise RuntimeError("Metadata contains {} columns but 3 were expected. Please refer to the documentation for the metadata file format.".format(len(l)))
                     
                     # Add key to dict if it does not exist yet
                     if not l[0] in metadata:
@@ -167,10 +166,16 @@ class Runner():
                 # Replicate information
                 replicate_id = replicate[0]
                 replicate_path = replicate[1]
-                full_replicate_path = os.path.join(self.input_dir, replicate_path)
 
+                # Build the full replicate path
+                if os.path.isabs(replicate_path): # Handle absolute path in the metadata 
+                    full_replicate_path = replicate_path
+                else:
+                    full_replicate_path = os.path.join(self.input_dir, replicate_path)
+                
                 if os.path.isdir(full_replicate_path):
                     no_analysis_directory = False 
+                    self.logger.warning("The directory \"{}\" does not exist. Please check that the paths in the metadata and the input path are correct.".format(full_replicate_path), extra={'context': self.CONTEXT})
                 
                 # Cells file structure are exclusively searched at the depth specified in Input/Depth relative 
                 # to the input path in the config (the real search depth is therefore the sum of the input 
