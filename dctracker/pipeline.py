@@ -72,7 +72,7 @@ class Pipeline():
             Colocalize(params)
             self.write_json(params)
         except InvalidCentroidError:
-            Logger().logger.warning("Mask and tracking does not match for cell \"{}\".".format(params[0]['Label']), extra={'context': self.context})
+            self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(params[0]['Label']), extra={'context': self.CONTEXT})
 
 
     def write_json(self, params):
@@ -113,5 +113,5 @@ class Pipeline():
                 raise UnhandledPostprocessingError(e)
             
             if result.returncode != 0:
-                msg = "Post-processing command failed with the error {}.".format(result.stderr.decode('utf-8'))
+                msg = "Post-processing command failed with the error : \n {}.".format(result.stderr.decode('utf-8'))
                 raise CalledProcessError(msg)

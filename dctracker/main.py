@@ -74,7 +74,7 @@ class Runner():
         try:
             self.config = parse_config(self.config_file)
         except configobj.ConfigObjError as e:
-            raise HaltException(e)
+            raise HaltException("Invalid configuragion file. Make sure the configuration is correct. Complete error message (for debugging): \n" + str(e))
         except ConfigError as e:
             raise HaltException(e.args[0])
         except ConfigValueError as e:
@@ -169,7 +169,7 @@ class Runner():
                 if replicate_path.is_dir():
                     no_analysis_directory = False 
                 else:
-                    self.logger.warning("The directory \"{}\" does not exist. Please check that the paths in the metadata correct.".format(full_replicate_path), extra={'context': self.CONTEXT})
+                    self.logger.warning("The directory \"{}\" does not exist. Please check that the paths in the metadata correct.".format(replicate_path), extra={'context': self.CONTEXT})
 
                 # List the expected file name/relative path based on the configuration information
                 expected_files = []
@@ -190,12 +190,15 @@ class Runner():
                                 # Get the cell path by removing the path from the config (this can include a file and folder)
                                 suffix_len = len(pathlib.Path(k).parts)
                                 cell_path = pathlib.Path(*path.parts[:-suffix_len])
-                                analysis_files[k].append(cell_path) 
-                              
+                                analysis_files[k].append(cell_path)
+
                 # Extract all the cell folder identified in the previous step
                 # The folder does not need to contain all the required file (based on the config)
                 # Incomplete folders will be handled after 
                 cell_folders = set(itertools.chain.from_iterable(analysis_files.values()))
+
+                if not cell_folders:
+                    raise HaltException("No valid cell folder were found. Nothing to analyze.")
                 
                 # Identify the part in the path that varies between the cells 
                 # This segment of the paths will be used as the label of the cells 
