@@ -223,7 +223,7 @@ class Runner():
                     label = ""
                     if label_start > 0:
                         label = '/'.join(folder.parts[label_start:])
-
+                    
                     cell['Condition'] = condition
                     cell['Replicate'] = replicate
                     cell['Label'] = label
@@ -236,7 +236,7 @@ class Runner():
                         particles = self.parse_cell(folder)
                         dctracker_args.append([cell] + particles)
                     except InvalidInputError as e:
-                        self.logger.warning("Folder \"{}\" does not contain the file \"{}\".".format(label, e), extra={'context': self.CONTEXT})
+                        self.logger.warning("Folder \"{}\" does not contain the file \"{}\".".format(folder, e), extra={'context': self.CONTEXT})
 
         # Handle invalid input
         if no_analysis_directory:
