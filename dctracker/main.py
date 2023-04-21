@@ -491,10 +491,10 @@ class GUIRunner(Runner):
         try:
             super().main()
         except HaltException as e:
-            self.logger.error(e, extra={'context': self.CONTEXT})
+            self.logger.critical(e, extra={'context': self.CONTEXT})
         except Exception as e:
-            self.logger.error("An unhandled except occured during DCTracker run. Please consider reporting the issue to help DCTracker development." , extra={'context': self.CONTEXT})
-            self.logger.error(e, extra={'context': self.CONTEXT})
+            self.logger.critical("An unhandled except occured during DCTracker run. Please consider reporting the issue to help DCTracker development." , extra={'context': self.CONTEXT})
+            self.logger.critical(e, exc_info=True, extra={'context': self.CONTEXT})
 
 
     # Button signals handling functions 
