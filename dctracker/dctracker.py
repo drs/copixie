@@ -23,6 +23,7 @@ import itertools
 import operator
 import math
 import pathlib 
+import logging 
 
 from skimage import io
 import numpy as np 
@@ -42,12 +43,29 @@ class DCTracker:
     """
 
     def __init__(self, params):
+        # Get the logger
+        self.logger = logging.getLogger()
+        self.CONTEXT = "DCTracker"
+
         self.description = params[0]
         self.particles = params[1:]
         self.main()
 
 
     def main(self):
+        # Determine the number of frames in the movie. This information is required to process static particles properly
+        # It is expected (but not required) that non-static particle have the same number of frame
+        frame_count = []
+        for particle in self.particles:
+            if not particle['Static']:
+                tracks = self.parse_trackmate(track_file=particle['TrackFile'])
+            frame_count.append(tracks['FRAME'].max()+1)
+        
+        if frame_count:
+            frame_count = max(frame_count)
+        else: # Should only occur if not particle are movies 
+            frame_count = 1 
+
         # Process the input files to generate the tables
         i = 0
         tables = list()
@@ -57,25 +75,19 @@ class DCTracker:
             if particle['MaskFile']:
                 if particle['Static']:
                     table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=self.description['PixelSize'], static=True)
+                    table = self.make_static(table, name) # Remove tracks where frame is not 0
+                    table = self.expand_static_table(table, frame_count)
                 else:
                     table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=self.description['PixelSize'])
-
-                # Make sure the static image contains a single image 
-                # Otherwise discard all but the first frame 
-                if particle['Static']:
-                    table = self.make_static(table, name)
-
-                table.rename({'TRACK_ID': name}, axis=1, inplace=True)
             else:
                 table = self.centroid_to_table(track_file=particle['TrackFile'], radius=particle['Radius'], pixel_size=self.description['PixelSize'])
 
-                if particle['Static']:
-                    table = self.make_static(table, name)
-
-                table.rename({'TRACK_ID': name}, axis=1, inplace=True)
+            table.rename({'TRACK_ID': name}, axis=1, inplace=True)
             tables.append(table)
-
             i += 1
+
+        tables[0].to_csv("/analysis/DCTracker/Hadrian/hTR.csv")
+        tables[1].to_csv("/analysis/DCTracker/Hadrian/Telomere.csv")
 
         # Merge the tables 
         df = tables[0]
@@ -84,11 +96,7 @@ class DCTracker:
         i = 1
         for table in tables[1:]:
             name = list(table.columns.values)[2]
-            if self.particles[i]['Static']:
-                df = pd.merge(df, table, how="outer", on=["X", "Y"], suffixes=("", "_y"))
-                df.drop("FRAME_y", inplace=True, axis=1)
-            else:
-                df = pd.merge(df, table, how="outer", on=["X", "Y", "FRAME"])
+            df = pd.merge(df, table, how="outer", on=["X", "Y", "FRAME"])
             i += 1
 
         # Keep the particle combinaisons with/without interaction
@@ -130,15 +138,6 @@ class DCTracker:
         full_output_file_path = pathlib.Path(self.description['Output'], 'DCTracker.csv')
         with open(full_output_file_path, 'w', newline='') as f:
             df.to_csv(f, index=False)
-
-
-    def make_static(self, table, name):
-        """Make a dataframe static by removing tracks with frame that are not 0"""
-
-        if not table[table['FRAME'] > 0].empty:
-            print("WARNING. Expected a static image but found multiple time frame for '{}'".format(name))
-        table = table[table['FRAME'] == 0]
-        return table
 
 
     def mask_to_table(self, track_file, mask_file, pixel_size, static=False):
@@ -231,6 +230,25 @@ class DCTracker:
             df = unique
 
         return df 
+
+
+    def make_static(self, table, name):
+        """Make a dataframe static by removing tracks with frame that are not 0"""
+        if not table[table['FRAME'] > 0].empty:
+            self.logger.warning("Expected a static image but found multiple time frame for '{}'".format(name), extra={'context': self.CONTEXT})
+        table = table[table['FRAME'] == 0]
+        return table
+
+
+    def expand_static_table(self, table, frame_count):
+        """Expand a static table (with a singe frame) to match the number of frame of the movie"""
+        df = pd.concat([table]*frame_count, ignore_index=True)
+        frame = []
+        for i in range(0,frame_count):
+            frame.extend([i]*len(table))
+        df["FRAME"] = frame 
+
+        return df
 
 
     def parse_trackmate(self, track_file):
