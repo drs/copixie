@@ -86,9 +86,6 @@ class DCTracker:
             tables.append(table)
             i += 1
 
-        tables[0].to_csv("/analysis/DCTracker/Hadrian/hTR.csv")
-        tables[1].to_csv("/analysis/DCTracker/Hadrian/Telomere.csv")
-
         # Merge the tables 
         df = tables[0]
         name = list(df.columns.values)[2]
@@ -171,6 +168,7 @@ class DCTracker:
                     if mask[track_y][track_x] != 0:
                         visited.add((track_x, track_y))
                 except IndexError:
+                    print("INVALID")
                     raise InvalidCentroidError()
             else:
                 try:
