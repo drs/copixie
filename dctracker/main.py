@@ -1,7 +1,7 @@
 """
-Copyright (C) 2023 Samuel Prince <samuel.prince-drouin@umontreal.ca>
+Copyright (C) 2023-2024 Samuel Prince <samuel.prince-drouin@umontreal.ca>
 
-This file is a part of DCTracker.
+This file is a part of CoPixie.
 
 This file may be used under the terms of the GNU General Public License
 version 3 as published by the Free Software Foundation and appearing in
@@ -35,7 +35,7 @@ try:
     from PyQt6 import QtCore
     from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
     from PyQt6.QtWidgets import QApplication, QWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QMainWindow, QFileDialog, QTextEdit, QStyle
-except ModuleNotFoundError:
+except ImportError:
     pass
 
 from dctracker.pipeline import Pipeline, UnhandledPostprocessingError, CalledProcessError
@@ -64,7 +64,7 @@ class Runner():
     
     def main(self):
         # Set the content and start logging at this point (everything logged before is fatal errors)
-        self.logger.info("Starting DCTracker (version {})".format(__version__), extra={'context': self.CONTEXT})
+        self.logger.info("Starting CoPixie (version {})".format(__version__), extra={'context': self.CONTEXT})
         self.logger.debug("Python version: {}".format(python_version()), extra={'context': self.CONTEXT})
 
         # Validate that the inputs and output exists and are readable or writable
@@ -105,7 +105,7 @@ class Runner():
                 except CalledProcessError as e:
                     raise HaltException(e)
                 except UnhandledPostprocessingError as e:
-                    msg = "An error occured during the execution of the postprocessing step. This is not handled by DCTracker, but here is the error message to help with the debugging : \n{}".format(e)
+                    msg = "An error occured during the execution of the postprocessing step. This is not handled by CoPixie, but here is the error message to help with the debugging : \n{}".format(e)
                     raise HaltException(msg)
             else:
                 Pipeline(params)
@@ -402,7 +402,7 @@ class GUIRunner(Runner):
             if sys.platform == 'win32':
                 import ctypes
                 MessageBox = ctypes.windll.user32.MessageBoxW
-                MessageBox(None, 'Cannot start DCTracker from GUI. PyQt6 module is not installed.', 'DCTracker', 0)
+                MessageBox(None, 'Cannot start CoPixie from GUI. PyQt6 module is not installed.', 'CoPixie', 0)
 
         # Create the main window widget 
         app = QApplication(sys.argv)
@@ -414,7 +414,7 @@ class GUIRunner(Runner):
         # Prepare the application
         self.main_window = QMainWindow()
         self.main_window.setGeometry(0, 0, 350, 400)
-        self.main_window.setWindowTitle("DCTracker GUI")
+        self.main_window.setWindowTitle("CoPixie GUI")
 
         # Folder icon 
         pixmapi = QStyle.StandardPixmap.SP_DirIcon
@@ -463,7 +463,7 @@ class GUIRunner(Runner):
         
         # Run button
         self.run_layout = QHBoxLayout()
-        self.run_button = QPushButton("Run DCTracker")
+        self.run_button = QPushButton("Run CoPixie")
         self.run_layout.addWidget(self.run_button)
         self.run_button.clicked.connect(self.run_main)
 
@@ -493,7 +493,7 @@ class GUIRunner(Runner):
         except HaltException as e:
             self.logger.critical(e, extra={'context': self.CONTEXT})
         except Exception as e:
-            self.logger.critical("An unhandled except occured during DCTracker run. Please consider reporting the issue to help DCTracker development." , extra={'context': self.CONTEXT})
+            self.logger.critical("An unhandled except occured during CoPixie run. Please consider reporting the issue to help CoPixie development." , extra={'context': self.CONTEXT})
             self.logger.critical(e, exc_info=True, extra={'context': self.CONTEXT})
 
 
@@ -532,52 +532,58 @@ class GUIRunner(Runner):
         self.textedit_logger.widget.ensureCursorVisible()
 
 
-class TextEditLogger(logging.Handler, QObject):
-    signal_logging = pyqtSignal(object)
-    def __init__(self):
-        logging.Handler.__init__(self)
-        QObject.__init__(self)
 
-        self.widget = QTextEdit()
-        self.widget.setReadOnly(True)
+try:
+    from PyQt6.QtCore import QObject, pyqtSignal, QThread, Qt
+except ImportError:
+    pass
+else:
+    class TextEditLogger(logging.Handler, QObject):
+        signal_logging = pyqtSignal(object)
+        def __init__(self):
+            logging.Handler.__init__(self)
+            QObject.__init__(self)
 
-        formatter = ColoredFormatter('%(asctime)s  [%(context)s]  %(levelname)s    %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-        self.setFormatter(formatter)
+            self.widget = QTextEdit()
+            self.widget.setReadOnly(True)
 
-    def emit(self, record):
-        msg = self.format(record)
-        conv = Ansi2HTMLConverter(dark_bg=False)
-        html = conv.convert(msg)
-        self.signal_logging.emit(html)
+            formatter = ColoredFormatter('%(asctime)s  [%(context)s]  %(levelname)s    %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            self.setFormatter(formatter)
 
-        
-class Worker(QThread):
-    def __init__(self, func, args):
-        super(Worker, self).__init__()
-        self.func = func
-        self.args = args
+        def emit(self, record):
+            msg = self.format(record)
+            conv = Ansi2HTMLConverter(dark_bg=False)
+            html = conv.convert(msg)
+            self.signal_logging.emit(html)
 
-    def run(self):
-        self.func(*self.args)
+            
+    class Worker(QThread):
+        def __init__(self, func, args):
+            super(Worker, self).__init__()
+            self.func = func
+            self.args = args
 
-
-class PathLineEdit(QLineEdit):
-
-    def __init__(self):
-        super().__init__()
-        self.setAcceptDrops(True)
-
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasUrls:
-            event.accept()
-        else:
-            event.ignore()
+        def run(self):
+            self.func(*self.args)
 
 
-    def dropEvent(self, event):
-        if event.mimeData().hasUrls():
-            self.setText(event.mimeData().urls()[0].toLocalFile())
-            event.accept()
-        else:
-            event.ignore()
+    class PathLineEdit(QLineEdit):
+
+        def __init__(self):
+            super().__init__()
+            self.setAcceptDrops(True)
+
+
+        def dragEnterEvent(self, event):
+            if event.mimeData().hasUrls:
+                event.accept()
+            else:
+                event.ignore()
+
+
+        def dropEvent(self, event):
+            if event.mimeData().hasUrls():
+                self.setText(event.mimeData().urls()[0].toLocalFile())
+                event.accept()
+            else:
+                event.ignore()

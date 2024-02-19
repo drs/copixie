@@ -1,7 +1,7 @@
 """
-Copyright (C) 2023 Samuel Prince <samuel.prince-drouin@umontreal.ca>
+Copyright (C) 2023-2024 Samuel Prince <samuel.prince-drouin@umontreal.ca>
 
-This file is a part of DCTracker.
+This file is a part of CoPixie.
 
 This file may be used under the terms of the GNU General Public License
 version 3 as published by the Free Software Foundation and appearing in

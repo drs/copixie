@@ -1,9 +1,9 @@
 #!/usr/bin/env python3 
 
 """
-Copyright (C) 2023 Samuel Prince <samuel.prince-drouin@umontreal.ca>
+Copyright (C) 2023-2024 Samuel Prince <samuel.prince-drouin@umontreal.ca>
 
-This file is a part of DCTracker.
+This file is a part of CoPixie.
 
 This file may be used under the terms of the GNU General Public License
 version 3 as published by the Free Software Foundation and appearing in
@@ -34,9 +34,8 @@ if parent_dir not in sys.path:
 from dctracker.main import CLIRunner, GUIRunner
 
 if __name__ == "__main__":
-    # Might work on lower Python version, but DCTracker was only tested on Python 3.11
-    if sys.version_info < (3,11,0):
-        raise RuntimeError("Non-supported Python version. A Python version >= 3.11 is required.")
+    if sys.version_info < (3,7,0):
+        raise RuntimeError("Non-supported Python version. A Python version >= 3.7 is required.")
     
     # On Windows, check the process parent name as suggested here https://stackoverflow.com/a/558804
     # When started by double click, the parent process is "py.exe"

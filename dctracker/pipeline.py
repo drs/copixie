@@ -1,7 +1,7 @@
 """
-Copyright (C) 2023 Samuel Prince <samuel.prince-drouin@umontreal.ca>
+Copyright (C) 2023-2024 Samuel Prince <samuel.prince-drouin@umontreal.ca>
 
-This file is a part of DCTracker.
+This file is a part of CoPixie.
 
 This file may be used under the terms of the GNU General Public License
 version 3 as published by the Free Software Foundation and appearing in
@@ -47,7 +47,7 @@ class Pipeline():
         self.CONTEXT = "Pipeline"
 
         # Run the pipeline in multiprocessing
-        self.logger.info("Starting DCTracker pipeline (DCTracker+Colocalize)", extra={'context': self.CONTEXT})
+        self.logger.info("Starting CoPixie pipeline (CoPixie+Colocalize)", extra={'context': self.CONTEXT})
         with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
             pool.map(self.run_dctracker, params)
 
