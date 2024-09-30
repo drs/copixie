@@ -20,9 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os 
 import sys 
-import subprocess 
-
-import psutil
 
 # Add dctracker module directory to the path as suggested in https://stackoverflow.com/a/63743700
 # before imports. This must be changed when the package will be made available as a module, 
@@ -31,38 +28,9 @@ parent_dir = os.path.split(os.path.dirname(os.path.realpath(__file__)))[0]
 if parent_dir not in sys.path:
     sys.path.append(parent_dir)
 
-from dctracker.main import CLIRunner, GUIRunner
+from dctracker.main import Runner
 
 if __name__ == "__main__":
     if sys.version_info < (3,7,0):
         raise RuntimeError("Non-supported Python version. A Python version >= 3.7 is required.")
-    
-    # On Windows, check the process parent name as suggested here https://stackoverflow.com/a/558804
-    # When started by double click, the parent process is "py.exe"
-    if sys.platform == 'win32':
-        p = psutil.Process(os.getpid())
-        if p.name() == 'py.exe':
-            GUIRunner()
-        else:
-            if len(sys.argv) > 1:
-                CLIRunner()
-            else:
-                GUIRunner()
-    # On Linux, check for sys.stdin.isatty() as suggested here https://stackoverflow.com/a/35784108
-    # this might work for Darwin (macOS), but was not tested yet
-    elif sys.platform == 'linux':
-        if sys.stdin.isatty():
-            if len(sys.argv) > 1:
-                CLIRunner()
-            else:
-                # Validate that there is a display available. 
-                # xdpyinfo should run without error is one is available as described in https://stackoverflow.com/a/12123998
-                p = subprocess.run(['xdpyinfo'], stdout=open(os.devnull, 'wb'), stderr=open(os.devnull, 'wb')) 
-                if p.returncode == 0:
-                    GUIRunner()
-                else:
-                    CLIRunner()
-        else:
-            GUIRunner()
-    else:
-        raise RuntimeError("Non-supported OS. Windows and Linux are currently supported.")
+    Runner()
