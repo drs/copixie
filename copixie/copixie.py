@@ -18,6 +18,7 @@
 
 import argparse
 import sys
+import os
 import pathlib
 import datetime 
 import multiprocessing
@@ -29,8 +30,8 @@ import configobj
 
 from .config import Config
 from .metadata import Metadata
-from .dctracker import DCTracker, InvalidCentroidError
-from .colocalize import Colocalize
+from .dctracker import dctracker
+from .colocalize import colocalize
 from .__version__ import __version__
 
 
@@ -69,8 +70,10 @@ class CoPixie():
         # run the analysis pipeline
         self._parse_config()
         self._parse_metadata()
+        self._create_output_dir()
         cells = self._prepare_pipeline()
-        self._run_pipeline(cells)
+        results = self._run_pipeline(cells)
+        self._write_results(results)
         self.logger.info("Done.", extra={'context': self.CONTEXT})
 
     def _get_arguments(self):
@@ -118,12 +121,22 @@ class CoPixie():
             sys.exit(1)
         self.logger.info("Parsed a metadata file ({} assays).".format(len(self.metadata.assays)), extra={'context': self.CONTEXT})
 
+    def _create_output_dir(self):
+        """create the output directory. this is done early to avoid computing the results
+        if the output directory is not writable"""
+        try:
+            self.output_dir.mkdir(parents=True)
+        except FileExistsError:
+            msg = "Output path points to an existing directory."
+            self.logger.error(msg, extra={'context': self.CONTEXT})
+            sys.exit(1)    
+
     def _prepare_pipeline(self):
         """prepare a list of each cells for each assay for the pipeline (PRIVATE)"""
 
         cells = []
         for assay in self.metadata.assays:
-            assay.process_file_structure(self.config, self.output_dir)
+            assay.process_file_structure(self.config)
             for cell in assay.cells:
                 cells.append((cell, assay))
         return cells
@@ -132,36 +145,26 @@ class CoPixie():
         """run copixie pipeline"""
         self.logger.info("Starting CoPixie pipeline (DCTracker+Colocalize)", extra={'context': self.CONTEXT})
         if self.threads == 1:
+            result = []
             for cell in cells:
-                self._pipeline_worker(cell)
+                result.append(self._pipeline_worker(cell))
         else:
             with multiprocessing.Pool(processes=self.threads) as pool:
-                pool.map(self._pipeline_worker, cells)
+                result = pool.map(self._pipeline_worker, cells)
+        
+        return result
 
     def _pipeline_worker(self, cell):
         """pipeline multiprocessing worker process (run each steps of the pipeline for a cell) (PRIVATE)"""
-        
-        try:
-            DCTracker(cell)
-            Colocalize(cell)
-            self._write_json(cell)
-        except InvalidCentroidError:
-            self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(cell.label), extra={'context': self.CONTEXT})
+        dctracker_df = dctracker(cell)
+        colocalize_df = colocalize(cell, dctracker_df)
+        return (cell, colocalize_df)
 
-
-    def _write_json(self, cell):
-        """write the cell information in JSON format in the output directory (PRIVATE)"""
-
-        # Generate a dict that contains the JSON object
-        metadata = {
-            'Condition': cell[1].condition,
-            'Replicate': cell[1].replicate[0], 
-            'Label': cell[0].label,
-            'PixelSize': self.config.pixel_size,
-            'FrameInterval': self.config.frame_interval
-        }
-
-        # Write the metadata
-        full_json_file_path = pathlib.Path(cell[0].output, 'Metadata.json')
-        with open(full_json_file_path, "w") as h:
-            json.dump(metadata, h, indent = 4)
+    def _write_results(self, results):
+        """write dctracker and colocalize tables (PRIVATE)"""
+        with open(pathlib.Path(self.output_dir, "CoPixie.csv"), "w") as h:
+            for result in results:
+                cell = result[0][0]
+                colocalize_df = result[1]
+                h.write('# LABEL:{} CONDITION:{} REPLICATE:{}\n'.format(cell.label, cell.condition, cell.replicate))
+                colocalize_df.to_csv(h, index=False)

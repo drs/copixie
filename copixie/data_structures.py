@@ -35,7 +35,7 @@ class Assay():
 
         self.cells = []
 
-    def process_file_structure(self, config, output_dir):
+    def process_file_structure(self, config):
         """process the file structure associated with the assay"""
         # we're getting the expected file name or relative path from the config
         # for the track file, since these file are required and should be present 
@@ -63,10 +63,9 @@ class Assay():
         # Parse the file structure
         for directory in cell_dirs:
             cell_full_path = pathlib.Path.joinpath(self.path, directory)
-            output_full_path = pathlib.Path(output_dir, re.sub('[^0-9a-zA-Z-]+', '_', self.condition), re.sub('[^0-9a-zA-Z-]+', '_', self.replicate[0]), directory)
             label = str(directory)
             try:
-                cell = Cell(cell_full_path, config, output_full_path, condition=self.condition, replicate=self.replicate, label=label)
+                cell = Cell(cell_full_path, config, condition=self.condition, replicate=self.replicate, label=label)
                 self.cells.append(cell)
             except RuntimeWarning as w:
                 # log warning that occured during a cell processing, but don't stop 
@@ -79,14 +78,13 @@ class Cell():
     """class to process the cells folder. each cell folder is expected to contain the files 
     described in the configuration file."""
 
-    def __init__(self, path, config, output, condition=None, replicate=None, label=None):
+    def __init__(self, path, config, condition=None, replicate=None, label=None):
         """constructor for the cell class"""
         self.pixel_size = config.pixel_size
         self.frame_interval = config.frame_interval
         self.condition = condition
         self.replicate = replicate
         self.label = label
-        self.output = output
         # parse the cell folder to validate that it contains the required files
         self.channels = self._prepare_cell(path, config)
 
