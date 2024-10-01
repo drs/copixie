@@ -22,10 +22,9 @@ import subprocess
 import logging 
 import pathlib 
 
-from dctracker.dctracker import DCTracker
-from dctracker.dctracker import InvalidCentroidError
-from dctracker.colocalize import Colocalize
-from dctracker.log import Logger
+from .dctracker import DCTracker, InvalidCentroidError
+from .colocalize import Colocalize
+from .log import Logger
 
 
 class UnhandledPostprocessingError(RuntimeError):
