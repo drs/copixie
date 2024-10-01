@@ -26,18 +26,15 @@ import logging
 import itertools
 import re 
 from platform import python_version
+from dataclasses import dataclass
 
 import configobj
 import pandas as pd
 
 from .pipeline import Pipeline, UnhandledPostprocessingError, CalledProcessError
 from .log import Logger, ColoredFormatter
-from .config import *
+from .config import Config
 from .__version__ import __version__
-
-
-class InvalidInputError(Exception):
-    """Raise if an input unit does not contain a file described in the config"""
 
 class HaltException(Exception): 
     """Raise if a critical error is encountered to allow CLI/GUI specific handling of critical errors"""
@@ -52,7 +49,7 @@ class Runner():
     def __init__(self):
         # Start the logger
         self.logger = Logger().logger
-        self.CONTEXT = "Main"
+        self.CONTEXT = "CoPixie"
     
     def main(self):
         # Set the content and start logging at this point (everything logged before is fatal errors)
@@ -64,17 +61,16 @@ class Runner():
 
         # Parse the configuration and handle the configuration errors
         try:
-            self.config = parse_config(self.config_file)
+            self.config = Config(self.config_file)
         except configobj.ConfigObjError as e:
-            raise HaltException("Invalid configuragion file. Make sure the configuration is correct. Complete error message (for debugging): \n" + str(e))
-        except ConfigError as e:
-            raise HaltException(e.args[0])
-        except ConfigValueError as e:
-            raise HaltException(e.args[0])
-        except ConfigTypeError as e:
-            raise HaltException(e.args[0])
+            msg = "Invalid configuragion file. Make sure the configuration is correct. Complete error message (for debugging): \n" + str(e)
+            self.logger.error(msg, extra={'context': self.CONTEXT})
+            sys.exit(1)
+        except RuntimeError as e:
+            self.logger.error(e, extra={'context': self.CONTEXT})
+            sys.exit(1)
 
-        self.logger.info("Found a valid configuration.", extra={'context': self.CONTEXT})
+        self.logger.info("Parsed the configuration file.", extra={'context': self.CONTEXT})
 
         # Parse the metadata
         try:
@@ -87,22 +83,23 @@ class Runner():
         # Run DCTracker in parallel
         params = self.prepare_run()
 
-        if 'Postprocessing' in self.config:
-            if 'Command' in self.config['Postprocessing']:
-                try:
-                    Pipeline(params, [self.output_dir, self.config['Postprocessing']['Command']])
-                except FileNotFoundError:
-                    msg = "The command file \"{}\" was not found. Make sure that this program is in the PATH or that the path in the configuration file is correct.".format(self.config['Postprocessing']['Command'])
-                    raise HaltException(msg)
-                except CalledProcessError as e:
-                    raise HaltException(e)
-                except UnhandledPostprocessingError as e:
-                    msg = "An error occured during the execution of the postprocessing step. This is not handled by CoPixie, but here is the error message to help with the debugging : \n{}".format(e)
-                    raise HaltException(msg)
-            else:
-                Pipeline(params)
-        else:
-            Pipeline(params)
+        # if 'Postprocessing' in self.config:
+        #     if 'Command' in self.config['Postprocessing']:
+        #         try:
+        #             Pipeline(params, [self.output_dir, self.config['Postprocessing']['Command']])
+        #         except FileNotFoundError:
+        #             msg = "The command file \"{}\" was not found. Make sure that this program is in the PATH or that the path in the configuration file is correct.".format(self.config['Postprocessing']['Command'])
+        #             raise HaltException(msg)
+        #         except CalledProcessError as e:
+        #             raise HaltException(e)
+        #         except UnhandledPostprocessingError as e:
+        #             msg = "An error occured during the execution of the postprocessing step. This is not handled by CoPixie, but here is the error message to help with the debugging : \n{}".format(e)
+        #             raise HaltException(msg)
+        #     else:
+        #         Pipeline(params)
+        # else:
+        #     Pipeline(params)
+        Pipeline(params)
 
         self.logger.info("Done.", extra={'context': self.CONTEXT})
 
@@ -165,11 +162,11 @@ class Runner():
 
                 # List the expected file name/relative path based on the configuration information
                 expected_files = []
-                for particle in self.config['Input']:
-                    if self.config['Input'][particle]['TrackFile']:
-                        expected_files.append(self.config['Input'][particle]['TrackFile'])
-                    if self.config['Input'][particle]['MaskFile']:
-                        expected_files.append(self.config['Input'][particle]['MaskFile'])
+                for channel in self.config.channels:
+                    if channel.track_file:
+                        expected_files.append(channel.track_file)
+                    if channel.mask_file:
+                        expected_files.append(channel.mask_file)
 
                 # Empty structure to list the file in the analysis filestructure
                 analysis_files = {key: list() for key in expected_files}
@@ -210,25 +207,16 @@ class Runner():
                 
                 # Parse the file structure
                 for folder in cell_folders:
-                    # Generate the cell dictionary 
-                    cell = dict()
                     label = ""
                     if label_start > 0:
                         label = '/'.join(folder.parts[label_start:])
-                    
-                    cell['Condition'] = condition
-                    cell['Replicate'] = replicate
-                    cell['Label'] = label
-                    full_output_path = pathlib.Path(self.output_dir, re.sub('[^0-9a-zA-Z-]+', '_', condition), re.sub('[^0-9a-zA-Z-]+', '_', replicate[0]), *folder.parts[label_start:])
-                    cell['Output'] = full_output_path
-                    cell['PixelSize'] = self.config['General']['PixelSize']
-                    cell['FrameInterval'] = self.config['General']['FrameInterval']
+                    output = pathlib.Path(self.output_dir, re.sub('[^0-9a-zA-Z-]+', '_', condition), re.sub('[^0-9a-zA-Z-]+', '_', replicate[0]), *folder.parts[label_start:])
                         
                     try:
-                        particles = self.parse_cell(folder)
-                        dctracker_args.append([cell] + particles)
-                    except InvalidInputError as e:
-                        self.logger.warning("Folder \"{}\" does not contain the file \"{}\".".format(folder, e), extra={'context': self.CONTEXT})
+                        cell = Cell(folder, output, self.config, condition=condition, replicate=replicate, label=label)
+                        dctracker_args.append(cell)
+                    except RuntimeWarning as w:
+                        self.logger.warning(w, extra={'context': self.CONTEXT})
 
         # Handle invalid input
         if no_analysis_directory:
@@ -237,62 +225,6 @@ class Runner():
             raise HaltException("Filestructure does not contain any valid file. This is likely due to an error in the configuration file or the metadata.")
 
         return dctracker_args
-
-
-    def parse_cell(self, path):
-        """Parse a cell folder and the config to retrive the information required to run DCTracker
-
-        Exceptions:
-            InvalidInputError: Raised if the cell folder does not contain all the files required for DCTracker
-        
-        Arguments:
-            path (str): Cell folder path
-
-        Return: 
-            dict: particle dictionary for DCTracker module
-        """
-        # Typical particle dictionary for DCTracker module
-        particle_dict = {
-            'Name': '',
-            'TrackFile': '',
-            'MaskFile': '', # Optional
-            'Radius': 0.0, # Optional but required if no mask
-            'Static': False,
-        }
-
-        # Fetch the general informations from the configuration file
-        particles = [] 
-
-        for particle_name in list_particle_key(self.config):
-            particle = particle_dict.copy()
-            particle['Name'] = particle_name
-                            
-            particle_config = self.config['Input'][particle_name]
-
-            # Config options for true are : 'y', 'yes', 'Yes'
-            if particle_config['Static'] in ['y', 'yes', 'Yes']:
-                particle['Static'] = True
-            else:
-                particle['Static'] = False
-            
-            # Every cell must at least contain a spot file that contains the centroid 
-            # regardless of the analysis type
-            track_path = pathlib.Path(path, particle_config['TrackFile'])
-            if not track_path.is_file():
-                raise InvalidInputError(particle_config['TrackFile'])
-            particle['TrackFile'] = track_path
-
-            # Cells can have either a mask or a particle raduis (no mask)
-            if particle_config['MaskFile']:
-                mask_path = pathlib.Path(path, particle_config['MaskFile'])
-                if not mask_path.is_file():
-                    raise InvalidInputError(particle_config['MaskFile'])
-                particle['MaskFile'] = mask_path
-            else:
-                particle['Radius'] = particle_config['Radius']
-            particles.append(particle)
-        
-        return particles
         
 
     def validate_user_parameters(self):
@@ -302,16 +234,7 @@ class Runner():
             raise HaltException("No output directory was provided.")
         if not self.metadata_file:
             raise HaltException("No metadata file was provided.")
-        if not self.config_file:
-            raise HaltException("No configuration file was provided.")
         
-        # Check that input files and directory exists and are readable
-        # (readabily is not reported as it's not expected to occur during normal use)
-        if not os.access(self.config_file, os.R_OK):
-            raise HaltException("Configuration path points to a non-existing file.")
-        if not os.access(self.metadata_file, os.R_OK):
-            raise HaltException("Metadata path points to a non-existing file.")
-
         # Check if the output directory exists and is writable
         # This is done to avoid running the computation if the output cannot be written
         # If the output directory exist, make sure it's empty and writable
@@ -377,3 +300,50 @@ class CLIRunner(Runner):
         args = parser.parse_args()
 
         return args
+
+
+class Cell():
+    """class to process the cells folder. each cell folder is expected to contain the files 
+    described in the configuration file."""
+
+    def __init__(self, path, output, config, condition=None, replicate=None, label=None):
+        """constructor for the cell class"""
+        self.output = output
+        self.pixel_size = config.pixel_size
+        self.frame_interval = config.frame_interval
+        self.condition = condition
+        self.replicate = replicate
+        self.label = label
+        # parse the cell folder to validate that it contains the required files
+        self.channels = self._prepare_cell(path, config)
+
+    def _prepare_cell(self, path, config):
+        """fetch the cell information and validate that it's a valid input for copixie"""
+        channels = []
+        for channel in config.channels:
+            descr = channel.description
+            static = channel.static
+            radius = channel.radius
+
+            track_file = pathlib.Path(path, channel.track_file)
+            if not track_file.is_file():
+                raise RuntimeWarning("Folder \"{}\" does not contain the file \"{}\".".format(path, channel.track_file))
+            
+            mask_file = None
+            if channel.mask_file:
+                mask_file = pathlib.Path(path, channel.mask_file)
+                if not mask_file.is_file():
+                    raise RuntimeWarning("Folder \"{}\" does not contain the file \"{}\".".format(path, channel.mask_file))
+            
+            channels.append(Channel(descr, track_file, mask_file, radius, static))
+        
+        return channels
+
+@dataclass
+class Channel():
+    """class to store the channel information for the cells"""
+    description: str
+    track_file: str
+    mask_file: str
+    radius: float
+    static: bool

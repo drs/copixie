@@ -40,25 +40,27 @@ class Pipeline():
     This class runs DCTracker analysis pipeline
     """
 
-    def __init__(self, params, postprocessing=[]):
+    def __init__(self, cells, postprocessing=[]):
         # Start the logger
         self.logger = logging.getLogger()
         self.CONTEXT = "Pipeline"
 
         # Run the pipeline in multiprocessing
         self.logger.info("Starting CoPixie pipeline (CoPixie+Colocalize)", extra={'context': self.CONTEXT})
-        with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
-            pool.map(self.run_dctracker, params)
+        for cell in cells:
+            self.run_dctracker(cell)
+        #with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        #    pool.map(self.run_dctracker, params)
 
         # Run the post-processing tasks
         if postprocessing:
             self.logger.info("Running post-processing tasks", extra={'context': self.CONTEXT})
             output_dir = postprocessing[0]
             postprocessing_cmd = postprocessing[1]
-            self.run_postprocessing(params, output_dir, postprocessing_cmd)
+            self.run_postprocessing(cells, output_dir, postprocessing_cmd)
 
 
-    def run_dctracker(self, params):
+    def run_dctracker(self, cell):
         """
         Run the complete analysis pipeline : DCTracker, Colocalize and write the cell JSON file
 
@@ -67,28 +69,27 @@ class Pipeline():
         """
 
         try:
-            DCTracker(params)
-            Colocalize(params)
-            self.write_json(params)
+            DCTracker(cell)
+            Colocalize(cell)
+            self.write_json(cell)
         except InvalidCentroidError:
-            self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(params[0]['Label']), extra={'context': self.CONTEXT})
+            self.logger.warning("Mask and tracking does not match for cell \"{}\".".format(cell.label), extra={'context': self.CONTEXT})
 
 
-    def write_json(self, params):
+    def write_json(self, cell):
         """Write the cell information in JSON format in the output directory"""
 
         # Generate a dict that contains the JSON object
-        description = params[0]
         metadata = {
-            'Condition': description['Condition'],
-            'Replicate': description['Replicate'][0], 
-            'Label': description['Label'],
-            'PixelSize': description['PixelSize'],
-            'FrameInterval': description['FrameInterval']
+            'Condition': cell.condition,
+            'Replicate': cell.replicate[0], 
+            'Label': cell.label,
+            'PixelSize': cell.pixel_size,
+            'FrameInterval': cell.frame_interval
         }
 
         # Write the metadata
-        full_json_file_path = pathlib.Path(description['Output'], 'Metadata.json')
+        full_json_file_path = pathlib.Path(cell.output, 'Metadata.json')
         with open(full_json_file_path, "w") as h:
             json.dump(metadata, h, indent = 4)
 

@@ -26,24 +26,23 @@ class Colocalize:
     Parse DCTracker colocalisation matrix to a simpler format
     """
 
-    def __init__(self, params):
-        self.description = params[0]
-        self.particles = params[1:]
+    def __init__(self, cell):
+        self.cell = cell
         self.main()
 
     
     def main(self):
-        full_dctracker_file_path = pathlib.Path(self.description['Output'], 'DCTracker.csv')
+        full_dctracker_file_path = pathlib.Path(self.cell.output, 'DCTracker.csv')
         dctracker = pandas.read_csv(full_dctracker_file_path, sep=',', comment='#')
 
-        particle_names = []
-        for particle in self.particles:
-            particle_names.append(particle["Name"])
+        channel_names = []
+        for channel in self.cell.channels:
+            channel_names.append(channel.description)
         
         # Parse the colocalisation and generate the simplified colocalisation table
         interactions = []
         # Initial grouping with same particle ID 
-        for k, g in dctracker.groupby(by = particle_names, dropna=False):   
+        for k, g in dctracker.groupby(by = channel_names, dropna=False):   
             # Split the group when the frame are non-consecutive
             for _, sg in g.groupby(g["FRAME"].diff().gt(1).cumsum()):
                 start_frame = int(sg.iloc[0]["FRAME"])
@@ -51,13 +50,13 @@ class Colocalize:
                 length = end_frame-start_frame
                 interactions.append(list(k) + [str(start_frame), str(end_frame)])
         colocalisation = pandas.DataFrame(interactions)
-        colocalisation.columns = particle_names + ["Start.Frame", "End.Frame"]
+        colocalisation.columns = channel_names + ["Start.Frame", "End.Frame"]
 
         # Change the particle ID type to Int64 (to accept NaN) to simplify the output
-        for col in particle_names:
+        for col in channel_names:
             colocalisation[col] = colocalisation[col].astype('Int64')
         
         # Write the output
-        full_output_file_path = pathlib.Path(self.description['Output'], 'Colocalize.csv')
+        full_output_file_path = pathlib.Path(self.cell.output, 'Colocalize.csv')
         with open(full_output_file_path, 'w', newline='') as f:
             colocalisation.to_csv(f, index=False)

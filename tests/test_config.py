@@ -1,189 +1,147 @@
+"""
+Copyright (C) 2023-2024 Samuel Prince <samuel.prince-drouin@umontreal.ca>
+
+This file is a part of CoPixie.
+
+This file may be used under the terms of the GNU General Public License
+version 3 as published by the Free Software Foundation and appearing in
+the file LICENSE included in the packaging of this file.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+
 import unittest
-from unittest import mock
-import os 
 import tempfile
-import re
-
-# Add project directory to sys.path in order to make the project file easily visible
-# as discussed in https://stackoverflow.com/q/4761041
-# Must be before the project import statements 
-import sys
 import os
-sys.path.append(os.path.dirname(os.path.realpath(__file__)) + "..")
+import pathlib
 
-from dctracker import config
-from dctracker.config import ConfigError, ConfigTypeError, ConfigValueError
+from copixie.config import Config
 
-class TestConfig(unittest.TestCase):
+# test case files are in the config directory
+TEST_DIR = "config"
 
-    def setUp(self):
-        # Generate the list that is used to build the invalid configs
-        self.dummy_config = config.CONFIG_SPECS.replace("__many__", "Label").splitlines()
-        self.min_input_count = 1 # Remove requirement of 2+ input to be able to use the config.CONFIG_SPECS directly
-
-
-    def options_to_list(self, line):
-        """Convert the options to a list"""
-        # Transform the option string into a list
-        options = line.split("option(")[1][:-1] # Extraction the option string
-        options = options.replace('\'', '').replace('"', '').replace(' ', '') # Clean unnecessary caracters
-        options = options.split(',') # Generate a list
-        return options
+def get_file(filename):
+    """Return the path of a test file."""
+    return pathlib.Path(os.path.join(TEST_DIR, filename)).resolve()
 
 
-    def generate_valid_line(self, line):
-        """Generate a valid line for the configuration based on the config specs description"""
-        # Remove defaults from the lines 
-        # Remove default value first, then remove empty parenthesis to handle both cases with 
-        # int/str defaults (empty parenthesis) and options defaults (no empty parenthesis)
-        # the coma is also removed for option default
-        line = re.sub('(, )?default=[^)]*', '', line)
-        line = line.replace('()', '')
+class ConfigCases(unittest.TestCase):
+    """Test the config file parser"""
 
-        # Handle the other descriptions
-        if "option(" in line:
-            line = line.split("option(")[0] + self.options_to_list(line)[0]
-        elif '= float' in line:
-            line = line.replace('= float', '= ' + str(0.0))
-        elif '= integer' in line:
-            line = line.replace('= integer', '= ' + str(0))
-        elif '= string' in line:
-            line = line.replace('= string', '= ' + 'text')
-        return line
+    def test_config_missing(self):
+        """Test parsing non-existing config file"""
+        path = "/dummy/file"
+        file = pathlib.Path(path).resolve()
 
-    ############################################################
-    #                  TESTS STARTS HERE                       #
-    ############################################################
+        with self.assertRaises(RuntimeError) as e:
+            Config(file)
+        self.assertEqual(str(e.exception), "Configuration file not found.")
 
-
-    def test_parse_config_throws_exception_when_file_missing(self):
-        file = "/dummy/file"
-        self.assertRaises(FileNotFoundError, config.parse_config, file)
-
-
-    def test_parse_config_throws_exception_when_missing_input(self):
-
-        testing_config = ""
-        for l in self.dummy_config:
-            testing_config = testing_config + self.generate_valid_line(l) + '\n'
-        
+    def test_config_empty(self):
+        """Test parsing empty config file"""
         with tempfile.NamedTemporaryFile() as tmp:
-            tmp.write(bytes(testing_config, encoding = 'utf-8'))
+            file = pathlib.Path(tmp.name).resolve()
+            with self.assertRaises(RuntimeError) as e:
+                Config(file)
+            self.assertEqual(str(e.exception), "Configuration file is empty.")
+
+    def test_config_single_channel(self):
+        """Test parsing a config file, single channel (488.cfg)"""
+        file = get_file("488.cfg")
+        with self.assertRaises(RuntimeError) as e:
+            Config(file)
+        self.assertEqual(str(e.exception), "Configuration file does not contain two input sections.")
+
+    def test_config_two_channel(self):
+        """Test parsing a config, two channels (488_561.cfg)"""
+        file = get_file("488_561.cfg")
+        config = Config(file)
+        self.assertEqual(config.pixel_size, 0.133)
+        self.assertEqual(config.frame_interval, 0.06)
+        self.assertEqual(len(config.channels), 2)
+        self.assertEqual(config.channels[0].track_file, "488/spots.csv")
+        self.assertFalse(config.channels[0].static)
+        self.assertEqual(config.channels[0].radius, 0.1)
+        self.assertIsNone(config.channels[0].mask_file)
+        self.assertEqual(config.channels[1].track_file, "561/spots.csv")
+        self.assertFalse(config.channels[1].static)
+        self.assertEqual(config.channels[1].radius, 0.1)
+        self.assertIsNone(config.channels[1].mask_file)
+
+    def test_config_two_channel_postprocessing(self):
+        """Test parsing a config, two channels, postprocessing (hTR_hTERT.cfg)"""
+        file = get_file("hTR_hTERT.cfg")
+        config = Config(file)
+        self.assertEqual(config.pixel_size, 0.133)
+        self.assertEqual(config.frame_interval, 0.1)
+        self.assertEqual(len(config.channels), 2)
+        self.assertEqual(config.channels[0].track_file, "htr/spots.csv")
+        self.assertFalse(config.channels[0].static)
+        self.assertEqual(config.channels[0].radius, 0.1)
+        self.assertIsNone(config.channels[0].mask_file)
+        self.assertEqual(config.channels[1].track_file, "telo/spots.csv")
+        self.assertFalse(config.channels[1].static)
+        self.assertIsNone(config.channels[1].radius)
+        self.assertEqual(config.channels[1].mask_file, "../mask.tif")
+        self.assertEqual(config.post_processing, "python3 /analysis/DCTracker/AggregatePy_Development/aggregate-hTR-telomere.py")
+
+    def test_config_missing_required(self):
+        """Test parsing config, missing a required parameter"""
+        with tempfile.NamedTemporaryFile() as tmp:
+            filename = "hTR_hTERT.cfg"
+            with open(os.path.join(TEST_DIR, filename)) as r_h:
+                for l in r_h:
+                    if not l.startswith("PixelSize"):
+                        tmp.write(l.encode())
             tmp.seek(0)
-            # Keep the default input count by keeping the default min_input_count value
-            self.assertRaises(ConfigError, config.parse_config, tmp.name)
+            file = pathlib.Path(tmp.name).resolve()
+            with self.assertRaises(RuntimeError) as e:
+                Config(file)
+            self.assertEqual(str(e.exception), "Required parameter \"General/PixelSize\" is missing from the config file.")
 
-
-    def test_parse_config_throws_exception_when_missing(self):
-        # Generate all possible configuration file with a missing element
-        #    - Section are removed entierly 
-        #    - Keyword that does not have a default are removed (keyword with default are 
-        #      ignored as this are optional) 
-
-        # Iterate over all line in the config spec
-        # The line in p is the line that will be analysed (and removed for the test) 
-        testing_config = []
-        for p in range(0, len(self.dummy_config)):
-            # Return depth (number of "[") for section string
-            def depth(s):
-                return len([c for c in s.strip() if c == "["])
-            
-            # Ignore blank line and lines with default as these are optional
-            if self.dummy_config[p].strip() and not ("default=" in self.dummy_config[p] or "Label" in self.dummy_config[p]):
-                config_str = ''
-                i = 0 
-                section = False
-                level = -1
-
-                # Iterate over the complete config once more to build the testing config
-                for l in self.dummy_config:
-                    # Keep line before the tested line
-                    if i < p:
-                        config_str = config_str + self.generate_valid_line(l) + '\n'
+    def test_config_incorrect_value(self):
+        """Test parsing config, incorrect option value"""
+        with tempfile.NamedTemporaryFile() as tmp:
+            filename = "hTR_hTERT.cfg"
+            with open(os.path.join(TEST_DIR, filename)) as r_h:
+                for l in r_h:
+                    if not l.startswith("    Static"):
+                        tmp.write(l.encode())
                     else:
-                        # Remove the tested line 
-                        # If the tested line is a section label, start a section segment
-                        # to remove the section block
-                        if i == p:
-                            if l.strip().startswith("["):
-                                section = True 
-                                level = depth(l)
-                        # After the testing line two cases can happen : 
-                        #    - If the testing is a section, lines are removed until the end of the section (i.e., a new section starts)
-                        #    - If the testing is a keyword, the remaining lines are added 
-                        else: 
-                            if l.strip().startswith("[") and level == depth(l):
-                                section = False 
-                                level = -1
-                            
-                            if not section:
-                                config_str = config_str + self.generate_valid_line(l) + '\n'
-                    i += 1 
-                
-                testing_config.append(config_str.replace('(default=None)', '')) # Most remove default=None otherwise will trigged a ConfigTypeError exception
-
-        with self.subTest(config_str=config_str):
-            for config_str in testing_config:
-                with tempfile.NamedTemporaryFile() as tmp:
-                    tmp.write(bytes(config_str, encoding = 'utf-8'))
-                    tmp.seek(0)
-                    self.assertRaises(ConfigError, config.parse_config, tmp.name, self.min_input_count)
-
-
-    def test_parse_config_throws_exception_when_invalid_type(self):
-        # Generate all possible configuration files with an invalid type
-        testing_config = []
-        for p in range(0, len(self.dummy_config)):
-            config_str = ""
-            i = 0
-
-            # Generate an invalid config if the line that is analysis contains the keyword 'option'
-            if '= float' in self.dummy_config[p] or '= integer' in self.dummy_config[p]:
-                # Iterate over the complete config to build the testing config
-                for l in self.dummy_config:
-                    # Keep line before or after the tested line
-                    if i < p or i > p:
-                        config_str = config_str + self.generate_valid_line(l) + '\n'
+                        tmp.write(b"    Static = invalid\n")
+            tmp.seek(0)
+            file = pathlib.Path(tmp.name).resolve()
+            with self.assertRaises(RuntimeError) as e:
+                Config(file)
+            self.assertEqual(str(e.exception), 
+                             "Parameter \"Input/Telomere/Static\" is set to \"invalid\" which is not one of the allowed values. Please set the value to be one of the following options : \"'y', 'yes', 'Yes', 'n', 'no', 'No', default='no'\""
+            )
+        
+    def test_config_incorrect_type(self):
+        """Test parsing config, incorrect option type"""
+        with tempfile.NamedTemporaryFile() as tmp:
+            filename = "hTR_hTERT.cfg"
+            with open(os.path.join(TEST_DIR, filename)) as r_h:
+                for l in r_h:
+                    if not l.startswith("PixelSize"):
+                        tmp.write(l.encode())
                     else:
-                        if '= float' in l:
-                            invalid_line = re.sub('\(default=.+\)', '', l.replace('= float', '= text'))
-                        elif '= integer' in l:
-                            invalid_line = re.sub('\(default=.+\)', '', l.replace('= integer', '= text'))
-                        config_str = config_str + invalid_line + '\n'
-                    i += 1
-                testing_config.append(config_str)
-
-        for config_str in testing_config:
-            with self.subTest(config_str=config_str):
-                with tempfile.NamedTemporaryFile() as tmp:
-                    tmp.write(bytes(config_str, encoding = 'utf-8'))
-                    tmp.seek(0)
-                    self.assertRaises(ConfigTypeError, config.parse_config, tmp.name, self.min_input_count)  
+                        tmp.write(b"PixelSize = invalid\n")
+            tmp.seek(0)
+            file = pathlib.Path(tmp.name).resolve()
+            with self.assertRaises(RuntimeError) as e:
+                Config(file)
+            self.assertEqual(str(e.exception), 
+                             "Parameter \"General/PixelSize\" is set to \"invalid\" which is not one of the allowed types. Please set the value to be of type : \"float\""
+            )
 
 
-    def test_parse_config_throws_exception_when_invalid_option(self):
-        # Generate all possible configuration files with an invalid type
-        testing_config = []
-        for p in range(0, len(self.dummy_config)):
-            config_str = ""
-            i = 0
-
-            # Generate an invalid config if the line that is analysis contains the keyword 'option'
-            if "option(" in self.dummy_config[p]:
-                # Iterate over the complete config to build the testing config
-                for l in self.dummy_config:
-                    # Keep line before or after the tested line
-                    if i < p or i > p:
-                        config_str = config_str + self.generate_valid_line(l) + '\n'
-                    else:
-                        invalid_line = l.split("option(")[0] + "INVALID_VALUE"
-                        config_str = config_str + invalid_line + '\n'
-                    i += 1
-                testing_config.append(config_str)    
-
-        for config_str in testing_config:
-            with self.subTest(config_str=config_str):
-                with tempfile.NamedTemporaryFile() as tmp:
-                    tmp.write(bytes(config_str, encoding = 'utf-8'))
-                    tmp.seek(0)
-                    self.assertRaises(ConfigValueError, config.parse_config, tmp.name, self.min_input_count)       
+if __name__ == "__main__":
+    runner = unittest.TextTestRunner(verbosity=2)
+    unittest.main(testRunner=runner)

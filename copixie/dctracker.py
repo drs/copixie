@@ -42,13 +42,14 @@ class DCTracker:
     The initial DCTracker software that analyse tracks and masks to generate a colocalisation matrix. 
     """
 
-    def __init__(self, params):
-        # Get the logger
+    def __init__(self, cell):
+        self.cell = cell
+
+        # get the logger
         self.logger = logging.getLogger()
         self.CONTEXT = "DCTracker"
 
-        self.description = params[0]
-        self.particles = params[1:]
+        # process the cell
         self.main()
 
 
@@ -56,9 +57,9 @@ class DCTracker:
         # Determine the number of frames in the movie. This information is required to process static particles properly
         # It is expected (but not required) that non-static particle have the same number of frame
         frame_count = []
-        for particle in self.particles:
-            if not particle['Static']:
-                tracks = self.parse_trackmate(track_file=particle['TrackFile'])
+        for channel in self.cell.channels:
+            if not channel.static:
+                tracks = self.parse_trackmate(track_file=channel.track_file)
             frame_count.append(tracks['FRAME'].max()+1)
         
         if frame_count:
@@ -69,18 +70,18 @@ class DCTracker:
         # Process the input files to generate the tables
         i = 0
         tables = list()
-        for particle in self.particles:
-            name = particle['Name']
+        for channel in self.cell.channels:
+            name = channel.description
 
-            if particle['MaskFile']:
-                if particle['Static']:
-                    table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=self.description['PixelSize'], static=True)
+            if channel.mask_file:
+                if channel.static:
+                    table = self.mask_to_table(track_file=channel.track_file, mask_file=channel.mask_file, pixel_size=self.cell.pixel_size, static=True)
                     table = self.make_static(table, name) # Remove tracks where frame is not 0
                     table = self.expand_static_table(table, frame_count)
                 else:
-                    table = self.mask_to_table(track_file=particle['TrackFile'], mask_file=particle['MaskFile'], pixel_size=self.description['PixelSize'])
+                    table = self.mask_to_table(track_file=channel.track_file, mask_file=channel.mask_file, pixel_size=self.cell.pixel_size)
             else:
-                table = self.centroid_to_table(track_file=particle['TrackFile'], radius=particle['Radius'], pixel_size=self.description['PixelSize'])
+                table = self.centroid_to_table(track_file=channel.track_file, radius=channel.radius, pixel_size=self.cell.pixel_size)
 
             table.rename({'TRACK_ID': name}, axis=1, inplace=True)
             tables.append(table)
@@ -130,9 +131,9 @@ class DCTracker:
             df[col] = df[col].astype('Int64')
 
         # Write the output 
-        pathlib.Path(self.description['Output']).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(self.cell.output).mkdir(parents=True, exist_ok=True)
         
-        full_output_file_path = pathlib.Path(self.description['Output'], 'DCTracker.csv')
+        full_output_file_path = pathlib.Path(self.cell.output, 'DCTracker.csv')
         with open(full_output_file_path, 'w', newline='') as f:
             df.to_csv(f, index=False)
 
