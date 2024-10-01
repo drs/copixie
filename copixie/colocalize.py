@@ -27,7 +27,7 @@ class Colocalize:
     """
 
     def __init__(self, cell):
-        self.cell = cell
+        self.cell = cell[0]
         self.main()
 
     

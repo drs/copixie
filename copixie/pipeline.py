@@ -53,11 +53,11 @@ class Pipeline():
         #    pool.map(self.run_dctracker, params)
 
         # Run the post-processing tasks
-        if postprocessing:
-            self.logger.info("Running post-processing tasks", extra={'context': self.CONTEXT})
-            output_dir = postprocessing[0]
-            postprocessing_cmd = postprocessing[1]
-            self.run_postprocessing(cells, output_dir, postprocessing_cmd)
+        #if postprocessing:
+        #    self.logger.info("Running post-processing tasks", extra={'context': self.CONTEXT})
+        #    output_dir = postprocessing[0]
+        #    postprocessing_cmd = postprocessing[1]
+        #    self.run_postprocessing(cells, output_dir, postprocessing_cmd)
 
 
     def run_dctracker(self, cell):
@@ -81,15 +81,15 @@ class Pipeline():
 
         # Generate a dict that contains the JSON object
         metadata = {
-            'Condition': cell.condition,
-            'Replicate': cell.replicate[0], 
-            'Label': cell.label,
-            'PixelSize': cell.pixel_size,
-            'FrameInterval': cell.frame_interval
+            'Condition': cell[1].condition,
+            'Replicate': cell[1].replicate[0], 
+            'Label': cell[0].label,
+            #'PixelSize': cell[1].config.pixel_size,
+            #'FrameInterval': cell[1].config.frame_interval
         }
 
         # Write the metadata
-        full_json_file_path = pathlib.Path(cell.output, 'Metadata.json')
+        full_json_file_path = pathlib.Path(cell[0].output, 'Metadata.json')
         with open(full_json_file_path, "w") as h:
             json.dump(metadata, h, indent = 4)
 

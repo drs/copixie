@@ -43,7 +43,7 @@ class DCTracker:
     """
 
     def __init__(self, cell):
-        self.cell = cell
+        self.cell = cell[0]
 
         # get the logger
         self.logger = logging.getLogger()
