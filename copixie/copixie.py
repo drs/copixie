@@ -22,11 +22,11 @@ import pathlib
 import datetime 
 import multiprocessing
 import json
+import logging
 from platform import python_version
 
 import configobj
 
-from .log import Logger
 from .config import Config
 from .metadata import Metadata
 from .dctracker import DCTracker, InvalidCentroidError
@@ -49,7 +49,13 @@ class CoPixie():
         self.threads = args.threads
 
         # initialize the logger
-        self.logger = Logger().logger
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s  [%(context)s]  %(levelname)s    %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
         self.CONTEXT = "CoPixie"
 
         # run the main analysis pipeline
