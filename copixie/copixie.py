@@ -32,7 +32,6 @@ from .dctracker import dctracker
 from .colocalize import colocalize
 from .__version__ import __version__
 
-
 class CoPixie():
     """CoPixie colocalization analysis pipeline"""
 
@@ -45,22 +44,21 @@ class CoPixie():
         self.threads = args.threads
 
         # initialize the logger
-        self.logger = logging.getLogger()
+        self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
-        formatter = logging.Formatter('%(asctime)s  [%(context)s]  %(levelname)s    %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter('%(asctime)s  [%(name)s]  %(levelname)s    %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         handler = logging.StreamHandler()
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
-        self.CONTEXT = "CoPixie"
 
         # run the main analysis pipeline
         self.main()
     
     def main(self):
         # start logging
-        self.logger.info("Starting CoPixie (version {})".format(__version__), extra={'context': self.CONTEXT})
-        self.logger.debug("Python version: {}".format(python_version()), extra={'context': self.CONTEXT})
+        self.logger.info("Starting CoPixie (version {})".format(__version__))
+        self.logger.debug("Python version: {}".format(python_version()))
 
         # run the analysis pipeline
         self._parse_config()
@@ -69,7 +67,7 @@ class CoPixie():
         cells = self._prepare_pipeline()
         results = self._run_pipeline(cells)
         self._write_results(results)
-        self.logger.info("Done.", extra={'context': self.CONTEXT})
+        self.logger.info("Done.")
 
     def _get_arguments(self):
         """parse the command line arguments (PRIVATE)"""
@@ -99,12 +97,12 @@ class CoPixie():
             self.config = Config(self.config_file)
         except configobj.ConfigObjError as e:
             msg = "Invalid configuragion file. Make sure the configuration is correct. Complete error message (for debugging): \n" + str(e)
-            self.logger.error(msg, extra={'context': self.CONTEXT})
+            self.logger.error(msg)
             sys.exit(1)
         except RuntimeError as e:
-            self.logger.error(e, extra={'context': self.CONTEXT})
+            self.logger.error(e)
             sys.exit(1)
-        self.logger.info("Parsed the configuration file.", extra={'context': self.CONTEXT})
+        self.logger.info("Parsed the configuration file.")
 
     def _parse_metadata(self):
         """parse the metadata"""
@@ -112,9 +110,9 @@ class CoPixie():
         try:
             self.metadata = Metadata(self.metadata_file)
         except RuntimeError as e:
-            self.logger.error(e, extra={'context': self.CONTEXT})
+            self.logger.error(e)
             sys.exit(1)
-        self.logger.info("Parsed a metadata file ({} assays).".format(len(self.metadata.assays)), extra={'context': self.CONTEXT})
+        self.logger.info("Parsed a metadata file ({} assays).".format(len(self.metadata.assays)))
 
     def _create_output_dir(self):
         """create the output directory. this is done early to avoid computing the results
@@ -123,7 +121,7 @@ class CoPixie():
             self.output_dir.mkdir(parents=True)
         except FileExistsError:
             msg = "Output path points to an existing directory."
-            self.logger.error(msg, extra={'context': self.CONTEXT})
+            self.logger.error(msg)
             sys.exit(1)    
 
     def _prepare_pipeline(self):
@@ -138,7 +136,7 @@ class CoPixie():
 
     def _run_pipeline(self, cells):
         """run copixie pipeline"""
-        self.logger.info("Starting CoPixie pipeline (DCTracker+Colocalize)", extra={'context': self.CONTEXT})
+        self.logger.info("Starting CoPixie pipeline (DCTracker+Colocalize)")
         if self.threads == 1:
             result = []
             for cell in cells:

@@ -31,8 +31,7 @@ pd.options.display.max_rows = None
 # TODO: handle cases where the centroid is outside of the image
 
 # get the logger
-logger = logging.getLogger()
-CONTEXT = "DCTracker"
+logger = logging.getLogger(__name__)
 
 def dctracker(cell):
     cell = cell[0]
@@ -204,7 +203,7 @@ def _mask_to_table(track_file, mask_file, pixel_size, static=False):
 def _make_static(table, name):
     """make a dataframe static by removing tracks with frame that are not 0 (PRIVATE)"""
     if not table[table['FRAME'] > 0].empty:
-        logger.warning("Expected a static image but found multiple time frame for '{}'".format(name), extra={'context': CONTEXT})
+        logger.warning("Expected a static image but found multiple time frame for '{}'".format(name))
     table = table[table['FRAME'] == 0]
     return table
 

@@ -17,6 +17,7 @@
 """Data structures for assays and cells"""
 
 import pathlib
+import logging
 from dataclasses import dataclass
 
 
@@ -26,6 +27,8 @@ class Assay():
     def __init__(self, path, qualifiers=None):
         """constructor for the assay class"""
         # TODO: add a check that the path is valid
+        self.logger = logging.getLogger(__name__)
+
         self.path = pathlib.Path(path)
         self.qualifiers = qualifiers
         self.cells = []
@@ -53,7 +56,11 @@ class Assay():
                         cell_dirs.add(cell_path)
 
         if not cell_dirs:
-            raise RuntimeWarning("No valid cell folder were found. Nothing to analyze.")
+            msg = "No valid cell folder were found in folder \"{}\".".format(self.path)
+            self.logger.warning(msg)
+
+        cell_dirs = list(cell_dirs)
+        cell_dirs.sort()
 
         # Parse the file structure
         for directory in cell_dirs:
@@ -61,12 +68,9 @@ class Assay():
             label = str(directory)
             try:
                 cell = Cell(cell_full_path, config, qualifiers=self.qualifiers, label=label)
-                self.cells.append(cell)
-            except RuntimeWarning as w:
-                # log warning that occured during a cell processing, but don't stop 
-                # the program execution
-                self.logger.warning(w, extra={'context': self.CONTEXT})
-                pass
+            except RuntimeError:
+                continue
+            self.cells.append(cell)
 
 
 class Cell():
@@ -75,6 +79,7 @@ class Cell():
 
     def __init__(self, path, config, qualifiers, label):
         """constructor for the cell class"""
+        self.logger = logging.getLogger(__name__)
         self.pixel_size = config.pixel_size
         self.frame_interval = config.frame_interval
         self.label = label
@@ -92,14 +97,18 @@ class Cell():
 
             track_file = pathlib.Path(path, channel.track_file)
             if not track_file.is_file():
-                raise RuntimeWarning("Folder \"{}\" does not contain the file \"{}\".".format(path, channel.track_file))
+                msg = "Folder \"{}\" does not contain the file \"{}\".".format(path, channel.track_file)
+                self.logger.warning(msg)
+                raise RuntimeError
             
             mask_file = None
             if channel.mask_file:
                 mask_file = pathlib.Path(path, channel.mask_file)
                 if not mask_file.is_file():
-                    raise RuntimeWarning("Folder \"{}\" does not contain the file \"{}\".".format(path, channel.mask_file))
-            
+                    msg = "Folder \"{}\" does not contain the file \"{}\".".format(path, channel.mask_file)
+                    self.logger.warning(msg)
+                    raise RuntimeError
+
             channels.append(Channel(descr, track_file, mask_file, radius, static))
         
         return channels

@@ -59,6 +59,6 @@ class Metadata():
                                 self.assays.append(Assay(l[-1], qualifiers))
                             else:
                                 self.assays.append(Assay(l[-1]))
-                
+
             if len(self.assays) < 1:
                 raise RuntimeError("Metadata file is empty.")
