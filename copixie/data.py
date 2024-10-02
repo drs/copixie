@@ -14,11 +14,58 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Data structures for assays and cells"""
+"""analysis metadata processing related classes"""
 
 import pathlib
 import logging
 from dataclasses import dataclass
+
+
+class Metadata():
+    """metadata file parser"""
+    def __init__(self, file=None, in_dir=None):
+        """metadata class constructor"""
+        # metadata placeholder
+        self.assays = []
+
+        # list of sample (no metadata) or metadata file (condition,replicate,path,description+)
+        if file:
+            self._parse_metadata(file)
+        # single directory input
+        elif in_dir:
+            self.assays.append(Assay(in_dir))
+        else:
+            raise RuntimeError("Cannot create an assay without metadata or input directory.")
+
+    def _parse_metadata(self, metadata_file):
+            """parse a metadata file. the metadata file is a tab separated file with 3 
+            rows Condition,Replicate,Path (PRIVATE)"""
+            header = None
+            if not metadata_file.is_file():
+                raise RuntimeError("Metadata file not found.")
+            else:
+                with open(metadata_file) as h:
+                    for l in h:
+                        # process the first header line, ignore subsequent comment lines
+                        if l.startswith("#"):
+                            if not header:
+                                header = l[1:].strip().split(",")
+                        # process the data
+                        else:
+                            l = l.strip().split(",")
+                            # create the assay qualifier dict if the input is a multi-column
+                            # metadata file
+                            if len(l) > 1:
+                                if header:
+                                    qualifiers = dict(map(lambda i,j : (i,j) , header,l))
+                                else:
+                                    qualifiers = {'description': ','.join(l[:-1])}
+                                self.assays.append(Assay(l[-1], qualifiers))
+                            else:
+                                self.assays.append(Assay(l[-1]))
+
+            if len(self.assays) < 1:
+                raise RuntimeError("Metadata file is empty.")
 
 
 class Assay():
@@ -112,6 +159,7 @@ class Cell():
             channels.append(Channel(descr, track_file, mask_file, radius, static))
         
         return channels
+
 
 @dataclass
 class Channel():
