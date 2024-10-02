@@ -18,11 +18,9 @@
 
 import argparse
 import sys
-import os
 import pathlib
 import datetime 
 import multiprocessing
-import json
 import logging
 from platform import python_version
 
@@ -36,10 +34,7 @@ from .__version__ import __version__
 
 
 class CoPixie():
-    """
-    This class contains the general code to run DCTracker regardless of it's 
-    execution mode (CLI or GUI). 
-    """
+    """CoPixie colocalization analysis pipeline"""
 
     def __init__(self):
         # parse the command line arguments

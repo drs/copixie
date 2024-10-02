@@ -17,7 +17,6 @@
 """Data structures for assays and cells"""
 
 import pathlib
-import re
 from dataclasses import dataclass
 
 

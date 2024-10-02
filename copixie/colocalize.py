@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Parse DCTracker colocalisation matrix to a simpler format"""
+"""Simplify DCTracker colocalisation matrix"""
 
 import pandas as pd
 
