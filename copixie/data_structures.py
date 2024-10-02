@@ -23,15 +23,11 @@ from dataclasses import dataclass
 class Assay():
     """class that contains each assay information (metadata and cells)"""
 
-    def __init__(self, path, condition=None, replicate=None, description=None):
+    def __init__(self, path, qualifiers=None):
         """constructor for the assay class"""
         # TODO: add a check that the path is valid
         self.path = pathlib.Path(path)
-
-        self.condition = condition
-        self.replicate = replicate
-        self.description = description
-
+        self.qualifiers = qualifiers
         self.cells = []
 
     def process_file_structure(self, config):
@@ -64,7 +60,7 @@ class Assay():
             cell_full_path = pathlib.Path.joinpath(self.path, directory)
             label = str(directory)
             try:
-                cell = Cell(cell_full_path, config, condition=self.condition, replicate=self.replicate, label=label)
+                cell = Cell(cell_full_path, config, qualifiers=self.qualifiers, label=label)
                 self.cells.append(cell)
             except RuntimeWarning as w:
                 # log warning that occured during a cell processing, but don't stop 
@@ -77,13 +73,12 @@ class Cell():
     """class to process the cells folder. each cell folder is expected to contain the files 
     described in the configuration file."""
 
-    def __init__(self, path, config, condition=None, replicate=None, label=None):
+    def __init__(self, path, config, qualifiers, label):
         """constructor for the cell class"""
         self.pixel_size = config.pixel_size
         self.frame_interval = config.frame_interval
-        self.condition = condition
-        self.replicate = replicate
         self.label = label
+        self.qualifiers = qualifiers
         # parse the cell folder to validate that it contains the required files
         self.channels = self._prepare_cell(path, config)
 

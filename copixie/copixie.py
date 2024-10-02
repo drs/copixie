@@ -161,5 +161,13 @@ class CoPixie():
             for result in results:
                 cell = result[0][0]
                 colocalize_df = result[1]
-                h.write('# LABEL:{} CONDITION:{} REPLICATE:{}\n'.format(cell.label, cell.condition, cell.replicate))
+
+                # create the qualifier description string
+                descr_str = "# LABEL:{} \n".format(cell.label)
+                if cell.qualifiers:
+                    for k,v in cell.qualifiers.items():
+                        descr_str += "{}: {} ".format(k,v)
+                descr_str = descr_str[:-1] # remove the last space
+                
+                h.write(descr_str)
                 colocalize_df.to_csv(h, index=False)
