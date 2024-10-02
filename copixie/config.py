@@ -94,7 +94,6 @@ class Config():
                 if isinstance(error, VdtValueError):
                     option_string = self._config_item(config.configspec, section_list, key)[7:-1]
                     msg = "Parameter \"{}\" is set to \"{}\" which is not one of the allowed values. Please set the value to be one of the following options : \"{}\"".format(self._section_key_string(section_list, key), key_string, option_string)
-                    print(msg)
                     raise RuntimeError(msg)
 
                 if isinstance(error, VdtTypeError):
