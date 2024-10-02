@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Tests for the config file parser"""
+"""Tests CoPixie configuration file handling"""
 
 import unittest
 import tempfile
