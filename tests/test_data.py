@@ -22,7 +22,7 @@ import tempfile
 import shutil
 import os
 
-from copixie.data import Metadata, Cell
+from copixie.data import Experiment, Assay, Cell
 from copixie.config import Config
 
 TEST_CONFIG_DIR="beads/config"
@@ -38,41 +38,36 @@ def get_metadata_file(filename):
     return pathlib.Path(TEST_METADATA_DIR, filename).resolve()
 
 
-class MetadataCases(unittest.TestCase):
+class ExperimentCases(unittest.TestCase):
     """Test the metadata file parser"""
 
-    def test_metadata_missing(self):
+    def test_experiment_metadata_missing(self):
         """Test parsing non-existing metadata file"""
         path = "/dummy/file"
         file = pathlib.Path(path).resolve()
 
         with self.assertRaises(RuntimeError) as e:
-            Metadata(file=file)
+            Experiment().create_from_file(file)
         self.assertEqual(str(e.exception), "Metadata file not found.")
 
-    def test_metadata_empty(self):
-        """Test parsing empty metadata file"""
-        with tempfile.NamedTemporaryFile() as tmp:
-            file = pathlib.Path(tmp.name).resolve()
-            with self.assertRaises(RuntimeError) as e:
-                Metadata(file=file)
-            self.assertEqual(str(e.exception), "Metadata file is empty.")
-
-    def test_metadata(self):
+    def test_expreriment_metadata_parsing(self):
         """Test parsing metadata file"""
         with tempfile.NamedTemporaryFile() as tmp:
             tmp.write("""POT1WT,1,/analysis/POT1WT/Rep1
 POT1WT,2,/analysis/POT1WT/Rep1""".encode())
             tmp.seek(0)
             file = pathlib.Path(tmp.name).resolve()
-            metadata = Metadata(file=file)
-            self.assertEqual(len(metadata.assays), 2)
-            self.assertEqual(metadata.assays[0].qualifiers["description"], "POT1WT,1")
-            self.assertEqual(metadata.assays[0].path, pathlib.Path("/analysis/POT1WT/Rep1"))
-            self.assertEqual(metadata.assays[1].qualifiers["description"], "POT1WT,2")
-            self.assertEqual(metadata.assays[1].path, pathlib.Path("/analysis/POT1WT/Rep1"))
+            experiment = Experiment()
+            experiment.create_from_file(file)
+            self.assertEqual(len(experiment), 2)
+            assay = next(experiment)
+            self.assertEqual(assay.qualifiers["description"], "POT1WT,1")
+            self.assertEqual(assay.path, pathlib.Path("/analysis/POT1WT/Rep1"))
+            assay = next(experiment)
+            self.assertEqual(assay.qualifiers["description"], "POT1WT,2")
+            self.assertEqual(assay.path, pathlib.Path("/analysis/POT1WT/Rep1"))
 
-    def test_metadata_header(self):
+    def test_experiment_metadata_parsing_header(self):
         """Test parsing metadata file, header"""
         with tempfile.NamedTemporaryFile() as tmp:
             tmp.write("""#cell line,replicate,path
@@ -80,33 +75,105 @@ POT1WT,1,/analysis/POT1WT/Rep1
 POT1WT,2,/analysis/POT1WT/Rep1""".encode())
             tmp.seek(0)
             file = pathlib.Path(tmp.name).resolve()
-            metadata = Metadata(file=file)
-            self.assertEqual(len(metadata.assays), 2)
-            self.assertEqual(metadata.assays[0].qualifiers["cell line"], "POT1WT")
-            self.assertEqual(metadata.assays[0].qualifiers["replicate"], "1")
-            self.assertEqual(metadata.assays[0].path, pathlib.Path("/analysis/POT1WT/Rep1"))
-            self.assertEqual(metadata.assays[1].qualifiers["cell line"], "POT1WT")
-            self.assertEqual(metadata.assays[1].qualifiers["replicate"], "2")
-            self.assertEqual(metadata.assays[1].path, pathlib.Path("/analysis/POT1WT/Rep1"))
+            experiment = Experiment()
+            experiment.create_from_file(file)
+            self.assertEqual(len(experiment), 2)
+            assay = next(experiment)
+            self.assertEqual(assay.qualifiers["cell line"], "POT1WT")
+            self.assertEqual(assay.qualifiers["replicate"], "1")
+            self.assertEqual(assay.path, pathlib.Path("/analysis/POT1WT/Rep1"))
+            assay = next(experiment)
+            self.assertEqual(assay.qualifiers["cell line"], "POT1WT")
+            self.assertEqual(assay.qualifiers["replicate"], "2")
+            self.assertEqual(assay.path, pathlib.Path("/analysis/POT1WT/Rep1"))
 
-    def test_sample_list(self):
+    def test_expreriment_sample_list(self):
         """Test parsing sample file"""
         with tempfile.NamedTemporaryFile() as tmp:
             tmp.write("""/analysis/BeadsFiles/20240210
 /analysis/BeadsFiles/20240211""".encode())
             tmp.seek(0)
             file = pathlib.Path(tmp.name).resolve()
-            metadata = Metadata(file=file)
-            self.assertEqual(len(metadata.assays), 2)
-            self.assertEqual(metadata.assays[0].path, pathlib.Path("/analysis/BeadsFiles/20240210"))
-            self.assertEqual(metadata.assays[1].path, pathlib.Path("/analysis/BeadsFiles/20240211"))
+            experiment = Experiment()
+            experiment.create_from_file(file)
+            self.assertEqual(len(experiment), 2)
+            self.assertEqual(experiment[0].path, pathlib.Path("/analysis/BeadsFiles/20240210"))
+            self.assertEqual(experiment[1].path, pathlib.Path("/analysis/BeadsFiles/20240211"))
 
-    def test_input_dir(self):
+    def test_experiment_input_dir(self):
         """Test metadata from input directory"""
         in_dir = "/analysis/BeadsFiles/20240210"
-        metadata = Metadata(in_dir=in_dir)
-        self.assertEqual(len(metadata.assays), 1)
-        self.assertEqual(metadata.assays[0].path, pathlib.Path("/analysis/BeadsFiles/20240210"))
+        experiment = Experiment()
+        experiment.create_from_dir(in_dir)
+        self.assertEqual(len(experiment), 1)
+        self.assertEqual(experiment[0].path, pathlib.Path("/analysis/BeadsFiles/20240210"))
+
+
+class AssayCases(unittest.TestCase):
+    """Test the assay file structure construction"""
+
+    def test_assay_file_structure(self):
+        """Test the assay file structure analysis"""
+        config = Config(get_config_file("488-561.cfg"))
+        assay = Assay("beads/tracking")
+        assay.process_file_structure(config)
+
+        self.assertEqual(assay.path, pathlib.Path(TEST_TRACKING_DIR))
+        self.assertEqual(len(assay), 2)
+
+        cell = next(assay)
+        self.assertEqual(cell.pixel_size, 0.133)
+        self.assertEqual(cell.frame_interval, 0.06)
+        self.assertEqual(cell.label, "Tracking_0102Non-matching")
+        channel = cell.channels[0]
+        self.assertEqual(channel.description, "488ch")
+        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "488/spots.csv"))
+        self.assertIsNone(channel.mask_file)
+        self.assertEqual(channel.radius, 0.1)
+        self.assertFalse(channel.static)
+        channel = cell.channels[1]
+        self.assertEqual(channel.description, "561ch")
+        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "561/spots.csv"))
+        self.assertIsNone(channel.mask_file)
+        self.assertEqual(channel.radius, 0.1)
+        self.assertFalse(channel.static)
+
+        cell = next(assay)
+        self.assertEqual(cell.pixel_size, 0.133)
+        self.assertEqual(cell.frame_interval, 0.06)
+        self.assertEqual(cell.label, "Tracking_0202Matching")
+        channel = cell.channels[0]
+        self.assertEqual(channel.description, "488ch")
+        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "488/spots.csv"))
+        self.assertIsNone(channel.mask_file)
+        self.assertEqual(channel.radius, 0.1)
+        self.assertFalse(channel.static)
+        channel = cell.channels[1]
+        self.assertEqual(channel.description, "561ch")
+        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "561/spots.csv"))
+        self.assertIsNone(channel.mask_file)
+        self.assertEqual(channel.radius, 0.1)
+        self.assertFalse(channel.static)   
+
+    def test_assay_file_structure_empty(self):
+        """Test the assay file structure analysis, one cell with missing files"""
+        config = Config(get_config_file("488-561.cfg"))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_tracking_dir = pathlib.Path(tmp_dir)            
+            assay = Assay(tmp_tracking_dir)
+
+            with self.assertLogs('copixie') as cm:
+                assay.process_file_structure(config)
+                self.assertEqual(cm.output, ["WARNING:copixie.data:No valid cell folder were found in folder \"{}\".".format(tmp_tracking_dir)])
+
+    def test_assay_file_structure_invalid(self):
+        """Test the assay file structure analysis"""
+        config = Config(get_config_file("488-561.cfg"))
+        assay = Assay("/dummy/path")
+        with self.assertLogs('copixie') as cm:
+            assay.process_file_structure(config)
+            self.assertEqual(cm.output, ["WARNING:copixie.data:No valid cell folder were found in folder \"/dummy/path\"."])
 
 
 class CellCases(unittest.TestCase):
@@ -162,89 +229,6 @@ class CellCases(unittest.TestCase):
                     Cell(str(pathlib.Path(tmp_tracking_dir, "Tracking_0202Matching")), 
                          config, qualifiers=None, label="Tracking_0202Matching")
                     self.assertEqual(cm.output, ['WARNING:copixie.data:Folder "{}/Tracking_0102Non-matching" does not contain the file "center/circle.tif".'.format(tmp_tracking_dir)])
-
-
-class AssayCases(unittest.TestCase):
-    """Test the assay file structure construction"""
-
-    def test_assay_file_structure(self):
-        """Test the assay file structure analysis"""
-        config = Config(get_config_file("488-561.cfg"))
-        metadata = Metadata(file=get_metadata_file("488-561-metadata.csv"))
-        self.assertEqual(len(metadata.assays), 1)
-        assay = metadata.assays[0]
-        assay.process_file_structure(config)
-
-        cells = assay.cells
-        self.assertEqual(assay.path, pathlib.Path(TEST_TRACKING_DIR))
-        self.assertEqual(len(cells), 2)
-
-        cell = cells[0]
-        self.assertEqual(cell.pixel_size, 0.133)
-        self.assertEqual(cell.frame_interval, 0.06)
-        self.assertEqual(cell.label, "Tracking_0102Non-matching")
-        self.assertEqual(cell.qualifiers["condition"], "beads")
-        self.assertEqual(cell.qualifiers["replicate"], "rep1")
-        channel = cell.channels[0]
-        self.assertEqual(channel.description, "488ch")
-        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "488/spots.csv"))
-        self.assertIsNone(channel.mask_file)
-        self.assertEqual(channel.radius, 0.1)
-        self.assertFalse(channel.static)
-        channel = cell.channels[1]
-        self.assertEqual(channel.description, "561ch")
-        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "561/spots.csv"))
-        self.assertIsNone(channel.mask_file)
-        self.assertEqual(channel.radius, 0.1)
-        self.assertFalse(channel.static)
-
-        cell = cells[1]
-        self.assertEqual(cell.pixel_size, 0.133)
-        self.assertEqual(cell.frame_interval, 0.06)
-        self.assertEqual(cell.label, "Tracking_0202Matching")
-        self.assertEqual(cell.qualifiers["condition"], "beads")
-        self.assertEqual(cell.qualifiers["replicate"], "rep1")
-        channel = cell.channels[0]
-        self.assertEqual(channel.description, "488ch")
-        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "488/spots.csv"))
-        self.assertIsNone(channel.mask_file)
-        self.assertEqual(channel.radius, 0.1)
-        self.assertFalse(channel.static)
-        channel = cell.channels[1]
-        self.assertEqual(channel.description, "561ch")
-        self.assertEqual(channel.track_file, pathlib.Path(TEST_TRACKING_DIR, cell.label, "561/spots.csv"))
-        self.assertIsNone(channel.mask_file)
-        self.assertEqual(channel.radius, 0.1)
-        self.assertFalse(channel.static)   
-
-    def test_assay_file_structure_empty(self):
-        """Test the assay file structure analysis, one cell with missing files"""
-        config = Config(get_config_file("488-561.cfg"))
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_tracking_dir = pathlib.Path(tmp_dir)
-            tmp_metadata = tempfile.NamedTemporaryFile()
-            tmp_metadata.write("""#condition,replicate,path
-    beads,rep1,{}""".format(tmp_tracking_dir).encode())
-            tmp_metadata.seek(0)
-            metadata_file = pathlib.Path(tmp_metadata.name).resolve()
-            metadata = Metadata(file=metadata_file)
-            
-            with self.assertLogs('copixie') as cm:
-                metadata.assays[0].process_file_structure(config)
-                self.assertEqual(cm.output, ["WARNING:copixie.data:No valid cell folder were found in folder \"{}\".".format(tmp_tracking_dir)])
-
-    def test_assay_file_structure_invalid(self):
-        """Test the assay file structure analysis"""
-        config = Config(get_config_file("488-561.cfg"))
-        with tempfile.NamedTemporaryFile() as tmp:
-            tmp.write("""#condition,replicate,path
-    beads,rep1,/dummy/path""".encode())
-            tmp.seek(0)
-            metadata = Metadata(file=pathlib.Path(tmp.name).resolve())
-
-        with self.assertLogs('copixie') as cm:
-            metadata.assays[0].process_file_structure(config)
-            self.assertEqual(cm.output, ["WARNING:copixie.data:No valid cell folder were found in folder \"/dummy/path\"."])
 
 
 if __name__ == "__main__":

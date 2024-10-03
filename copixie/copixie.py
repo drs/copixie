@@ -27,10 +27,11 @@ from platform import python_version
 import configobj
 
 from .config import Config
-from .metadata import Metadata
+from .data import Experiment
 from .dctracker import dctracker
 from .colocalize import colocalize
 from .__version__ import __version__
+
 
 class CoPixie():
     """CoPixie colocalization analysis pipeline"""
@@ -61,10 +62,15 @@ class CoPixie():
         self.logger.debug("Python version: {}".format(python_version()))
 
         # run the analysis pipeline
-        self._parse_config()
-        self._parse_metadata()
+        config = self._parse_config()
+        self.logger.info("Parsed the configuration file.")
+
+        experiment = self._parse_metadata()
+        experiment.create_cells(config)
+        self.logger.info("Loaded the experiment from the metadata file (found {} assays).".format(len(experiment.assays)))
+
         self._create_output_dir()
-        cells = self._prepare_pipeline()
+        cells = experiment.get_cells()
         results = self._run_pipeline(cells)
         self._write_results(results)
         self.logger.info("Done.")
@@ -94,7 +100,7 @@ class CoPixie():
         """parse the configuration"""
         
         try:
-            self.config = Config(self.config_file)
+            config = Config(self.config_file)
         except configobj.ConfigObjError as e:
             msg = "Invalid configuragion file. Make sure the configuration is correct. Complete error message (for debugging): \n" + str(e)
             self.logger.error(msg)
@@ -102,17 +108,20 @@ class CoPixie():
         except RuntimeError as e:
             self.logger.error(e)
             sys.exit(1)
-        self.logger.info("Parsed the configuration file.")
+
+        return config
 
     def _parse_metadata(self):
         """parse the metadata"""
 
+        metadata = Experiment()
         try:
-            self.metadata = Metadata(self.metadata_file)
+            metadata.create_from_file(self.metadata_file)
         except RuntimeError as e:
             self.logger.error(e)
             sys.exit(1)
-        self.logger.info("Parsed a metadata file ({} assays).".format(len(self.metadata.assays)))
+        
+        return metadata
 
     def _create_output_dir(self):
         """create the output directory. this is done early to avoid computing the results
@@ -122,17 +131,7 @@ class CoPixie():
         except FileExistsError:
             msg = "Output path points to an existing directory."
             self.logger.error(msg)
-            sys.exit(1)    
-
-    def _prepare_pipeline(self):
-        """prepare a list of each cells for each assay for the pipeline (PRIVATE)"""
-
-        cells = []
-        for assay in self.metadata.assays:
-            assay.process_file_structure(self.config)
-            for cell in assay.cells:
-                cells.append((cell, assay))
-        return cells
+            sys.exit(1)
 
     def _run_pipeline(self, cells):
         """run copixie pipeline"""

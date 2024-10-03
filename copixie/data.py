@@ -18,67 +18,147 @@
 
 import pathlib
 import logging
-from dataclasses import dataclass
+import itertools
+import operator
+import math
+
+import imageio
+import pandas as pd
+
+def create_experiment_from_file(file, config):
+    experiment = Experiment()
+    experiment.create_from_file(file)
+    populate_experiment(experiment, config)
+    return experiment
+
+def create_experiment_from_dir(in_dir, config):
+    experiment = Experiment()
+    experiment.create_from_dir(in_dir)
+    populate_experiment(experiment, config)
+    return experiment
+
+def populate_experiment(experiment, config):
+    experiment.create_cells(config)
 
 
-class Metadata():
-    """metadata file parser"""
-    def __init__(self, file=None, in_dir=None):
-        """metadata class constructor"""
-        # metadata placeholder
-        self.assays = []
+class Experiment():
+    """the experiment class contains all the assay of a CoPixie analysis.
+    the experiment is cerated from a metadata file or a directory"""
+    def __init__(self):
+        """experiment class constructor"""
+        self._assays = []
 
-        # list of sample (no metadata) or metadata file (condition,replicate,path,description+)
-        if file:
-            self._parse_metadata(file)
-        # single directory input
-        elif in_dir:
-            self.assays.append(Assay(in_dir))
+        # initialize index for iteration
+        self._index = 0  
+
+    def __iter__(self):
+        """reset the iterator and return the object itself"""
+        self._index = 0
+        return self
+
+    def __next__(self):
+        """return the next assay or raise StopIteration"""
+        if self._index < len(self._assays):
+            result = self._assays[self._index]
+            self._index += 1
+            return result
         else:
-            raise RuntimeError("Cannot create an assay without metadata or input directory.")
+            raise StopIteration  # End of the list reached
 
-    def _parse_metadata(self, metadata_file):
-            """parse a metadata file. the metadata file is a tab separated file with 3 
-            rows Condition,Replicate,Path (PRIVATE)"""
-            header = None
-            if not metadata_file.is_file():
-                raise RuntimeError("Metadata file not found.")
-            else:
-                with open(metadata_file) as h:
-                    for l in h:
-                        # process the first header line, ignore subsequent comment lines
-                        if l.startswith("#"):
-                            if not header:
-                                header = l[1:].strip().split(",")
-                        # process the data
-                        else:
-                            l = l.strip().split(",")
-                            # create the assay qualifier dict if the input is a multi-column
-                            # metadata file
-                            if len(l) > 1:
-                                if header:
-                                    qualifiers = dict(map(lambda i,j : (i,j) , header,l))
-                                else:
-                                    qualifiers = {'description': ','.join(l[:-1])}
-                                self.assays.append(Assay(l[-1], qualifiers))
+    def __getitem__(self, index):
+        """return the assay the a specific index"""
+        return self._assays[index]
+
+    def __len__(self):
+        """return experiment length"""
+        return len(self._assays)
+
+    def create_from_file(self, file):
+        """create experiment from a metadata file"""
+        self._parse_metadata(file)
+
+    def create_from_dir(self, in_dir):
+        """create experiment from an input directory"""
+        self._assays.append(Assay(in_dir))
+
+    def _parse_metadata(self, file):
+        """parse a metadata file. the metadata file is a tab separated file with 3 
+        rows Condition,Replicate,Path (PRIVATE)"""
+        header = None
+        if not file.is_file():
+            raise RuntimeError("Metadata file not found.")
+        else:
+            with open(file) as h:
+                for l in h:
+                    # process the first header line, ignore subsequent comment lines
+                    if l.startswith("#"):
+                        if not header:
+                            header = l[1:].strip().split(",")
+                    # process the data
+                    else:
+                        l = l.strip().split(",")
+                        # create the assay qualifier dict if the input is a multi-column
+                        # metadata file
+                        if len(l) > 1:
+                            if header:
+                                qualifiers = dict(map(lambda i,j : (i,j) , header,l))
                             else:
-                                self.assays.append(Assay(l[-1]))
+                                qualifiers = {'description': ','.join(l[:-1])}
+                            self._assays.append(Assay(l[-1], qualifiers=qualifiers))
+                        else:
+                            self._assays.append(Assay(l[-1]))            
 
-            if len(self.assays) < 1:
-                raise RuntimeError("Metadata file is empty.")
+    def create_cells(self, config):
+        """process the assays filestructure to create the cells"""
+        for assay in self._assays:
+            assay.process_file_structure(config)
+
+    def get_cells(self):
+        """return a list of all the cells of all the assays (PRIVATE)"""
+
+        cells = []
+        for assay in self._assays:
+            for cell in assay.cells:
+                cells.append((cell, assay))
+        return cells
 
 
 class Assay():
-    """class that contains each assay information (metadata and cells)"""
+    """the assay class describes a single metadata record or input.
+    an assay can include one or more cells"""
 
     def __init__(self, path, qualifiers=None):
         """constructor for the assay class"""
-        # TODO: add a check that the path is valid
         self.logger = logging.getLogger(__name__)
 
         self.path = pathlib.Path(path)
         self.qualifiers = qualifiers
-        self.cells = []
+        self._cells = []
+
+        # initialize index for iteration
+        self._index = 0
+
+    def __iter__(self):
+        """reset the iterator and return the object itself"""
+        self._index = 0
+        return self
+
+    def __next__(self):
+        """return the next assay or raise StopIteration"""
+        if self._index < len(self._cells):
+            result = self._cells[self._index]
+            self._index += 1
+            return result
+        else:
+            raise StopIteration  # End of the list reached
+
+    def __getitem__(self, index):
+        """return the assay the a specific index"""
+        return self._cells[index]
+
+    def __len__(self):
+        """return experiment length"""
+        return len(self._cells)
 
     def process_file_structure(self, config):
         """process the file structure associated with the assay"""
@@ -117,12 +197,12 @@ class Assay():
                 cell = Cell(cell_full_path, config, qualifiers=self.qualifiers, label=label)
             except RuntimeError:
                 continue
-            self.cells.append(cell)
+            self._cells.append(cell)
 
 
 class Cell():
-    """class to process the cells folder. each cell folder is expected to contain the files 
-    described in the configuration file."""
+    """cell class. the cells are an individual record of the assay.
+    cells are constructed as described in the configuration file."""
 
     def __init__(self, path, config, qualifiers, label):
         """constructor for the cell class"""
