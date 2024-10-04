@@ -64,7 +64,7 @@ class Experiment():
     @classmethod
     def from_file(cls, file, config):
         """create experiment from a metadata file"""
-        assays = cls._parse_metadata(pathlib.Path(file).resolve())
+        assays = cls._parse_metadata(file)
         return cls(assays, config)
     
     @classmethod
@@ -99,20 +99,17 @@ class Experiment():
                             else:
                                 qualifiers = {'description': ','.join(l[:-1])}
                             assays.append([l[-1], qualifiers])
-                            # self._assays.append(Assay(l[-1], self, qualifiers=qualifiers))
                         else:
                             assays.append([l[-1], None])
-                            # self._assays.append(Assay(l[-1]), self)
 
         return assays
 
     def get_cells(self):
         """return a list of all the cells of all the assays (PRIVATE)"""
-
         cells = []
         for assay in self._assays:
-            for cell in assay.cells:
-                cells.append((cell, assay))
+            for cell in assay:
+                cells.append(cell)
         return cells
 
 
@@ -187,7 +184,7 @@ class Assay():
 
         # Parse the file structure
         for directory in cell_dirs:
-            cell_full_path = pathlib.Path.joinpath(self.path, directory)
+            cell_full_path = pathlib.Path(self.path, directory)
             label = str(directory)
             try:
                 cell = Cell(cell_full_path, self.config, qualifiers=self.qualifiers, label=label)

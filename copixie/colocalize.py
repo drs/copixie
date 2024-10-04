@@ -19,12 +19,11 @@
 import pandas as pd
 
     
-def colocalize(cell, dctracker):
-    cell = cell[0]
+def Colocalize(cell, df):
     channel_names = []
     for channel in cell.channels:
         channel_names.append(channel.description)
-        
+
     # Parse the colocalisation and generate the simplified colocalisation table
     interactions = []
     # Initial grouping with same particle ID 
@@ -33,13 +32,12 @@ def colocalize(cell, dctracker):
         for _, sg in g.groupby(g["FRAME"].diff().gt(1).cumsum()):
             start_frame = int(sg.iloc[0]["FRAME"])
             end_frame = int(sg.iloc[-1]["FRAME"])
-            length = end_frame-start_frame
             interactions.append(list(k) + [str(start_frame), str(end_frame)])
     colocalisation = pd.DataFrame(interactions)
     colocalisation.columns = channel_names + ["Start.Frame", "End.Frame"]
 
-    # Change the particle ID type to Int64 (to accept NaN) to simplify the output
-    for col in channel_names:
-        colocalisation[col] = colocalisation[col].astype('Int64')
+    # cast the particle IDs to Int32 instead of int32 to accept NaN
+    colocalisation = colocalisation.astype('Int32')
+    colocalisation.reset_index(inplace=True, drop=True)
 
     return colocalisation
