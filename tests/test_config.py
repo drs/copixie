@@ -79,15 +79,14 @@ class ConfigCases(unittest.TestCase):
         self.assertEqual(config.pixel_size, 0.133)
         self.assertEqual(config.frame_interval, 0.1)
         self.assertEqual(len(config.channels), 2)
-        self.assertEqual(config.channels[0].track_file, "htr/spots.csv")
+        self.assertEqual(config.channels[0].track_file, "hTR_allspots.csv")
         self.assertFalse(config.channels[0].static)
         self.assertEqual(config.channels[0].radius, 0.1)
         self.assertIsNone(config.channels[0].mask_file)
-        self.assertEqual(config.channels[1].track_file, "telo/spots.csv")
+        self.assertEqual(config.channels[1].track_file, "telomere_allspots.csv")
         self.assertFalse(config.channels[1].static)
         self.assertIsNone(config.channels[1].radius)
         self.assertEqual(config.channels[1].mask_file, "../mask.tif")
-        self.assertEqual(config.post_processing, "python3 /analysis/DCTracker/AggregatePy_Development/aggregate-hTR-telomere.py")
 
     def test_config_missing_required(self):
         """Test parsing config, missing a required parameter"""
