@@ -24,11 +24,11 @@ import pathlib
 from copixie.config import Config
 
 # test case files are in the config directory
-TEST_DIR = "config"
+TEST_DIR = "data"
 
 def get_file(filename):
     """Return the path of a test file."""
-    return pathlib.Path(os.path.join(TEST_DIR, filename)).resolve()
+    return os.path.join(TEST_DIR, filename)
 
 
 class ConfigCases(unittest.TestCase):
@@ -36,8 +36,7 @@ class ConfigCases(unittest.TestCase):
 
     def test_config_missing(self):
         """Test parsing non-existing config file"""
-        path = "/dummy/file"
-        file = pathlib.Path(path).resolve()
+        file = "/dummy/file"
 
         with self.assertRaises(RuntimeError) as e:
             Config(file)
@@ -46,13 +45,12 @@ class ConfigCases(unittest.TestCase):
     def test_config_empty(self):
         """Test parsing empty config file"""
         with tempfile.NamedTemporaryFile() as tmp:
-            file = pathlib.Path(tmp.name).resolve()
             with self.assertRaises(RuntimeError) as e:
-                Config(file)
+                Config(tmp.name)
             self.assertEqual(str(e.exception), "Configuration file is empty.")
 
     def test_config_single_channel(self):
-        """Test parsing a config file, single channel (488.cfg)"""
+        """Test parsing config, single channel (488.cfg)"""
         file = get_file("488.cfg")
         with self.assertRaises(RuntimeError) as e:
             Config(file)
@@ -100,9 +98,8 @@ class ConfigCases(unittest.TestCase):
                     if not l.startswith("PixelSize"):
                         tmp.write(l.encode())
             tmp.seek(0)
-            file = pathlib.Path(tmp.name).resolve()
             with self.assertRaises(RuntimeError) as e:
-                Config(file)
+                Config(tmp.name)
             self.assertEqual(str(e.exception), "Required parameter \"General/PixelSize\" is missing from the config file.")
 
     def test_config_incorrect_value(self):
@@ -116,9 +113,8 @@ class ConfigCases(unittest.TestCase):
                     else:
                         tmp.write(b"    Static = invalid\n")
             tmp.seek(0)
-            file = pathlib.Path(tmp.name).resolve()
             with self.assertRaises(RuntimeError) as e:
-                Config(file)
+                Config(tmp.name)
             self.assertEqual(str(e.exception), 
                              "Parameter \"Input/Telomere/Static\" is set to \"invalid\" which is not one of the allowed values. Please set the value to be one of the following options : \"'y', 'yes', 'Yes', 'n', 'no', 'No', default='no'\""
             )
@@ -134,9 +130,8 @@ class ConfigCases(unittest.TestCase):
                     else:
                         tmp.write(b"PixelSize = invalid\n")
             tmp.seek(0)
-            file = pathlib.Path(tmp.name).resolve()
             with self.assertRaises(RuntimeError) as e:
-                Config(file)
+                Config(tmp.name)
             self.assertEqual(str(e.exception), 
                              "Parameter \"General/PixelSize\" is set to \"invalid\" which is not one of the allowed types. Please set the value to be of type : \"float\""
             )
