@@ -26,10 +26,13 @@ def Colocalize(cell, df):
 
     # Parse the colocalisation and generate the simplified colocalisation table
     interactions = []
-    # Initial grouping with same particle ID 
-    for k, g in dctracker.groupby(by = channel_names, dropna=False):   
-        # Split the group when the frame are non-consecutive
-        for _, sg in g.groupby(g["FRAME"].diff().gt(1).cumsum()):
+
+    # initial grouping with same particle ID 
+    for k, g in df.groupby(by = channel_names, dropna=False):
+        # split the group when the frame are non-consecutive (diff > 1 between frames)
+        # we need to bfill to include the first value of a group and fillna with one 
+        # so that tables with a single frame are included
+        for _, sg in g.groupby(g["FRAME"].diff().gt(1).cumsum().bfill(limit=1).fillna(1)):
             start_frame = int(sg.iloc[0]["FRAME"])
             end_frame = int(sg.iloc[-1]["FRAME"])
             interactions.append(list(k) + [str(start_frame), str(end_frame)])

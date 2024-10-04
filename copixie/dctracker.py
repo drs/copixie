@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 def DCTracker(cell):
     assert len(cell.channels) > 1
+    
     df = cell.channels[0].get_table()
     i = 1
     while i < len(cell.channels):
@@ -43,35 +44,30 @@ def DCTracker(cell):
     df.drop_duplicates(inplace=True)
 
     # order the dataframe with frame as the first column
-    cols = list(df.columns.values) 
-    order = [cols[1]] + [cols[0]] + cols[2:]   
+    cols = list(df.columns.values)
+    order = [cols[1]] + [cols[0]] + cols[2:]
     df = df.reindex(columns=order)
     df.sort_values(by=order, inplace=True)
 
     # remove rows with NA in the frame (static images with no colocalisation)
     df.dropna(subset=['FRAME'], inplace=True)
 
-    # keep rows with NaN in any columns only if the values in the other columns are not present elsewhere in the table
-    frames = []
-    for _,g in df.groupby(by="FRAME"):
-        # create a boolean mask of rows that have NaN values
-        nan_mask = g.isna().any(axis=1)
-
-        # create a boolean mask of rows that have unique values in at least one column
-        unique_masks = []
-        for col in g.columns[1:]:
-            unique_mask = g[col].isin(g[col].value_counts()[g[col].value_counts()==1].index)
-            unique_masks.append(unique_mask)
-        keep_mask = np.any(unique_masks, axis=0)
-
-        # combine the masks and apply them to the DataFrame
-        keep = ~nan_mask | keep_mask
-        g = g[keep].reset_index(drop=True)
-        frames.append(g)
-    df = pd.concat(frames, axis=0)
-
-    # Change the particle ID type to Int64 (to accept NaN) to simplify the output
-    for col in cols:
-        df[col] = df[col].astype('Int64')
+    # up to this point every overlap possibilities are included. this can include 
+    # partial overlap if a portion of the the particle pixels does not overlap. 
+    # we will discard these partial overlap, keeping only the colocalisations with 
+    # the most overlaps. this can include a single colocalisation, or multiple 
+    # (ex. if A overlap with B and C, but B and C does not overlap, we will keep 
+    # both A-B and A-C colocalisations). 
+    # since NaN are put at the end of sorting group by default, record with partial
+    # overlap will end up after the record with most interaction, thus they can be filled
+    # and duplicates can be removed
+    for col in order[1:]:
+        order = ["FRAME", col]
+        delete_mask = df.sort_values(by=order).ffill().duplicated(cols).sort_index()
+        df = df.loc[~delete_mask]
+    
+    # cast the particle IDs to Int32 instead of int32 to accept NaN
+    df = df.astype('Int32')
+    # df.reset_index(inplace=True, drop=True)
 
     return df
