@@ -16,7 +16,8 @@
 
 """Configuration file parser"""
 
-import io 
+import io
+import pathlib
 
 from configobj import ConfigObj, flatten_errors
 from validate import Validator, VdtValueError, VdtTypeError
@@ -39,7 +40,7 @@ class Config():
 
     def __init__(self, cfg_file):
         """constructor for the Config class"""
-        cfg = self._load_config(cfg_file)
+        cfg = self._load_config(pathlib.Path(cfg_file).resolve())
         self.pixel_size = cfg['General']['PixelSize']
         self.frame_interval = cfg['General']['FrameInterval']
 

@@ -22,31 +22,19 @@ import itertools
 import operator
 import math
 
-import imageio
+import imageio.v3 as iio
 import pandas as pd
-
-def create_experiment_from_file(file, config):
-    experiment = Experiment()
-    experiment.create_from_file(file)
-    populate_experiment(experiment, config)
-    return experiment
-
-def create_experiment_from_dir(in_dir, config):
-    experiment = Experiment()
-    experiment.create_from_dir(in_dir)
-    populate_experiment(experiment, config)
-    return experiment
-
-def populate_experiment(experiment, config):
-    experiment.create_cells(config)
 
 
 class Experiment():
     """the experiment class contains all the assay of a CoPixie analysis.
     the experiment is cerated from a metadata file or a directory"""
-    def __init__(self):
+
+    def __init__(self, assays=[], config=None):
         """experiment class constructor"""
         self._assays = []
+        for assay in assays:
+            self._assays.append(Assay(assay[0], config, qualifiers=assay[1]))
 
         # initialize index for iteration
         self._index = 0  
@@ -73,17 +61,23 @@ class Experiment():
         """return experiment length"""
         return len(self._assays)
 
-    def create_from_file(self, file):
+    @classmethod
+    def from_file(cls, file, config):
         """create experiment from a metadata file"""
-        self._parse_metadata(file)
-
-    def create_from_dir(self, in_dir):
+        assays = cls._parse_metadata(pathlib.Path(file).resolve())
+        return cls(assays, config)
+    
+    @classmethod
+    def from_dir(cls, in_dir, config):
         """create experiment from an input directory"""
-        self._assays.append(Assay(in_dir))
+        assays = [[in_dir, None],]
+        return cls(assays, config)
 
-    def _parse_metadata(self, file):
+    @staticmethod
+    def _parse_metadata(file):
         """parse a metadata file. the metadata file is a tab separated file with 3 
         rows Condition,Replicate,Path (PRIVATE)"""
+        assays = []
         header = None
         if not file.is_file():
             raise RuntimeError("Metadata file not found.")
@@ -104,14 +98,13 @@ class Experiment():
                                 qualifiers = dict(map(lambda i,j : (i,j) , header,l))
                             else:
                                 qualifiers = {'description': ','.join(l[:-1])}
-                            self._assays.append(Assay(l[-1], qualifiers=qualifiers))
+                            assays.append([l[-1], qualifiers])
+                            # self._assays.append(Assay(l[-1], self, qualifiers=qualifiers))
                         else:
-                            self._assays.append(Assay(l[-1]))            
+                            assays.append([l[-1], None])
+                            # self._assays.append(Assay(l[-1]), self)
 
-    def create_cells(self, config):
-        """process the assays filestructure to create the cells"""
-        for assay in self._assays:
-            assay.process_file_structure(config)
+        return assays
 
     def get_cells(self):
         """return a list of all the cells of all the assays (PRIVATE)"""
@@ -127,13 +120,16 @@ class Assay():
     """the assay class describes a single metadata record or input.
     an assay can include one or more cells"""
 
-    def __init__(self, path, qualifiers=None):
+    def __init__(self, path, config=None, qualifiers=None):
         """constructor for the assay class"""
         self.logger = logging.getLogger(__name__)
 
         self.path = pathlib.Path(path)
+        self.config = config
         self.qualifiers = qualifiers
         self._cells = []
+        if config:
+            self._process_file_structure()
 
         # initialize index for iteration
         self._index = 0
@@ -160,12 +156,12 @@ class Assay():
         """return experiment length"""
         return len(self._cells)
 
-    def process_file_structure(self, config):
-        """process the file structure associated with the assay"""
+    def _process_file_structure(self):
+        """process the file structure associated with the assay (PRIVATE)"""
         # we're getting the expected file name or relative path from the config
         # for the track file, since these file are required and should be present 
         # in all cells
-        track_files = [channel.track_file for channel in config.channels]
+        track_files = [channel.track_file for channel in self.config.channels]
         cell_dirs = set()
         
         # iterate over files in the assay path and fetch the cell folders 
@@ -194,7 +190,7 @@ class Assay():
             cell_full_path = pathlib.Path.joinpath(self.path, directory)
             label = str(directory)
             try:
-                cell = Cell(cell_full_path, config, qualifiers=self.qualifiers, label=label)
+                cell = Cell(cell_full_path, self.config, qualifiers=self.qualifiers, label=label)
             except RuntimeError:
                 continue
             self._cells.append(cell)
@@ -211,7 +207,6 @@ class Cell():
         self.frame_interval = config.frame_interval
         self.label = label
         self.qualifiers = qualifiers
-        # parse the cell folder to validate that it contains the required files
         self.channels = self._prepare_cell(path, config)
 
     def _prepare_cell(self, path, config):
@@ -236,16 +231,176 @@ class Cell():
                     self.logger.warning(msg)
                     raise RuntimeError
 
-            channels.append(Channel(descr, track_file, mask_file, radius, static))
+            channels.append(Channel(descr, track_file, self.pixel_size, mask_file, radius, static))
         
         return channels
 
 
-@dataclass
 class Channel():
     """class to store the channel information for the cells"""
-    description: str
-    track_file: str
-    mask_file: str
-    radius: float
-    static: bool
+
+    def __init__(self, description, track_file, pixel_size, mask_file=None, radius=None, static=False):
+        self.logger = logging.getLogger(__name__)
+        self.description = description
+        self.track_file = track_file
+        self.pixel_size = pixel_size
+        self.mask_file = mask_file
+        self.radius = radius
+        self.static = static
+
+    def get_table(self):
+        """create and return a table for the channel from the track file, radius or mask file"""
+
+        # create the object table using the centroid (track file) and mask file
+        if self.mask_file:
+            table = self._mask_to_table(track_file=self.track_file, mask_file=self.mask_file, pixel_size=self.pixel_size, static=self.static)
+        # create the object table using the centroid (track file) and radius
+        else:
+            assert self.radius is not None
+            table = self._centroid_to_table(track_file=self.track_file, radius=self.radius, pixel_size=self.pixel_size)
+
+        table.rename({'TRACK_ID': self.description}, axis=1, inplace=True)
+
+        return table
+
+    def _mask_to_table(self, track_file, mask_file, pixel_size, static=False):
+        """Generate a hash from a mask (PRIVATE)"""
+
+        tracks = self._parse_trackmate(track_file)
+
+        mask = iio.imread(mask_file)
+        if static:
+            # resise static mask with more than 1 frames to a single frame
+            if len(mask.shape) == 3:
+                mask = [mask[0]]
+            # add a 3rd dimension to the mask
+            else:
+                mask = [mask]
+
+        x = []
+        y = []
+        ids = []
+        times = []
+        centroids = dict()
+
+        neighbour_dist = [(-1, 0), (0, -1), (0, 0), (0, 1), (1, 0)] # neighbour distances are +/- 1 excluding diagonals
+        for track in tracks.iterrows():
+            # process only the first frame of static movies
+            if static and track[1]['FRAME'] > 0:
+                continue
+
+            track_id = int(track[1]['TRACK_ID'])
+            track_time = int(track[1]['FRAME'])
+            track_x = int(round(track[1]['POSITION_X']/pixel_size))
+            track_y = int(round(track[1]['POSITION_Y']/pixel_size))
+
+            if not track_time in centroids:
+                centroids[track_time] = dict()
+            centroids[track_time][track_id] = (track_x, track_y)
+
+            visited = set()
+            
+            # ignore centroids when the mask does not contain a particle at the centroid center
+            try:
+                if mask[track_time][track_y][track_x] != 0: 
+                    visited.add((track_x, track_y))
+            except IndexError as e:
+                raise IndexError("Centroid outside of the mask file.").with_traceback(e.__traceback__)
+
+            completed = set()
+
+            # add each positive positions to the completed list
+            while visited: # done when there are no new nodes to visit
+                v = visited.pop()
+                completed.add(v)
+                neighbour = [tuple(map(operator.add, v, x)) for x in neighbour_dist]
+                for n in neighbour:
+                    if not n in completed:
+                        try:
+                            if mask[track_time][int(n[1])][int(n[0])] != 0:
+                                visited.add(n)
+                        except IndexError:
+                            pass
+
+            # add the results to the lists
+            x.extend([c[0] for c in completed])
+            y.extend([c[1] for c in completed])
+            ids.extend(itertools.repeat(track_id, len(completed)))
+            times.extend(itertools.repeat(track_time, len(completed)))
+
+        df = pd.DataFrame(list(zip(x, y, ids, times)), columns=['X', 'Y', 'TRACK_ID', 'FRAME'])
+
+        # Filter overlapping particles
+        unique = df.drop_duplicates(subset = ['X', 'Y', 'FRAME'], keep = False)
+        duplicated = df[df.duplicated(subset = ['X', 'Y', 'FRAME'], keep = False)]
+
+        # Distance between the potential centroid and any position attributed to the particule with the centroid
+        if not duplicated.empty:
+            duplicated['DISTANCE'] = duplicated.apply(lambda x: math.sqrt((x['X']-centroids[x['FRAME']][x['TRACK_ID']][0])**2 + (x['Y']-centroids[x['FRAME']][x['TRACK_ID']][1])**2), axis=1)
+
+            selected = list()
+            for _, g in duplicated.groupby(by = ['X', 'Y', 'FRAME']):
+                selected.append(g.sort_values(by = ['DISTANCE']).iloc[0]) # Keep the track were the centroid is closer to the point 
+
+            selected_df = pd.DataFrame(selected)
+            selected_df.drop(labels='DISTANCE', axis=1, inplace=True)
+            selected_df = selected_df.astype(int)
+            frames = [unique, selected_df]
+            df = pd.concat(frames)
+        else:  
+            df = unique
+
+        # remove the frame column if the image is static
+        if static:
+            df.drop(labels='FRAME', axis=1, inplace=True)
+
+        return df
+
+    def _parse_trackmate(self, track_file):
+        """parse a trackmate file (PRIVATE)"""
+
+        tracks = pd.read_csv(track_file, sep=',', header = 0, usecols=['TRACK_ID', 'POSITION_X', 'POSITION_Y', 'FRAME'])
+            
+        # In version 7 TrackMate added three additional header rows
+        # To maintain compatibility with version 6, header rows are removed by removing rows 
+        # where the track id is not numeric
+        # Conversion to string before numeric check to avoid error with float/int types
+        tracks = tracks[tracks["TRACK_ID"].astype(str).str.isnumeric()]
+
+        # TrackMate header changed the columns type to str. 
+        # Changing numeric columns types back to int
+        tracks['POSITION_X'] = pd.to_numeric(tracks['POSITION_X'])
+        tracks['POSITION_Y'] = pd.to_numeric(tracks['POSITION_Y'])
+        tracks['FRAME'] = pd.to_numeric(tracks['FRAME'])
+
+        return tracks
+
+    def _centroid_to_table(self, track_file, radius, pixel_size):
+        """generate a hash table from a list of centroids (PRIVATE)"""
+
+        tracks = self._parse_trackmate(track_file)
+
+        x = []
+        y = []
+        ids = []
+        times = []
+        radius_px = int(round(radius/pixel_size))
+        particle_sphere = list(itertools.product(range(-radius_px, radius_px+1), range(-radius_px, radius_px+1)))
+            
+        for track in tracks.iterrows():
+            track_id = int(track[1]['TRACK_ID'])
+            track_time = int(track[1]['FRAME'])
+            track_x = int(round(track[1]['POSITION_X']/pixel_size))
+            track_y = int(round(track[1]['POSITION_Y']/pixel_size))
+
+            centroid = (track_x, track_y)
+
+            particle = [tuple(map(operator.add, centroid, x)) for x in particle_sphere]
+
+            # Add the results to the lists
+            x.extend([p[0] for p in particle])
+            y.extend([p[1] for p in particle])
+            ids.extend(itertools.repeat(track_id, len(particle)))
+            times.extend(itertools.repeat(track_time, len(particle)))
+            
+        return pd.DataFrame(list(zip(x, y, ids, times)), columns=['X', 'Y', 'TRACK_ID', 'FRAME']) 
